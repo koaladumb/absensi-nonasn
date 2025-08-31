@@ -1,334 +1,556 @@
 <!DOCTYPE html>
 <html lang="id">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Aplikasi Absensi Wajah Karyawan</title>
-  <script src="https://cdn.tailwindcss.com"></script>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Absensi Karyawan – Face Recognition (GitHub Pages)</title>
+  <meta name="theme-color" content="#0ea5e9" />
   <style>
-    body { font-family: 'Inter', sans-serif; }
-    #video { transform: scaleX(-1); }
-    canvas { position: absolute; }
-    #video-container.hidden { display: none; }
+    :root{
+      --bg:#0b1020; --panel:#121a32; --soft:#1b2547; --accent:#0ea5e9; --muted:#94a3b8; --ok:#22c55e; --warn:#f59e0b; --err:#ef4444; --white:#f8fafc;
+    }
+    *{box-sizing:border-box}
+    html,body{height:100%}
+    body{margin:0;font-family:ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, Noto Sans, Helvetica Neue, Arial, "Apple Color Emoji","Segoe UI Emoji";background:linear-gradient(180deg,#0b1020,#0b102000 60%),radial-gradient(1200px 600px at 100% 0%,#0ea5e93a 0,#0b1020 70%) fixed;color:var(--white)}
+    header{padding:18px 16px;display:flex;gap:12px;align-items:center;justify-content:space-between;background:linear-gradient(180deg,#0e152b, #0b1020)}
+    h1{font-size:18px;margin:0;font-weight:700;letter-spacing:.3px}
+    .badge{font-size:12px;padding:4px 10px;border-radius:999px;background:#0ea5e91a;border:1px solid #0ea5e955;color:#bae6fd}
+    main{max-width:1050px;margin:20px auto;padding:16px}
+    .tabs{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px}
+    .tab{padding:10px 12px;border-radius:12px;background:var(--panel);border:1px solid #1f2a4a;cursor:pointer;user-select:none}
+    .tab.active{outline:2px solid var(--accent);box-shadow:0 0 0 4px #0ea5e915}
+    .grid{display:grid;gap:16px}
+    @media(min-width:900px){.grid{grid-template-columns: 1.3fr .7fr}}
+    .card{background:var(--panel);border:1px solid #1f2a4a;border-radius:16px;overflow:hidden}
+    .card h2{margin:0;padding:14px 14px;border-bottom:1px solid #1f2a4a;background:linear-gradient(180deg,#141d3a,#121a32)}
+    .card .body{padding:14px}
+    .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+    input,select,button{font:inherit}
+    input[type="text"], input[type="password"], input[type="number"]{background:#0b1020;border:1px solid #273559;padding:10px 12px;border-radius:12px;color:var(--white);min-width:220px}
+    .mono{font-family:ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace}
+    button{background:linear-gradient(180deg,#1a2b56,#162349);border:1px solid #223163;border-radius:12px;color:#e2e8f0;padding:10px 14px;cursor:pointer}
+    button.primary{background:linear-gradient(180deg,#0ea5e9,#0284c7);border-color:#38bdf8;color:#031525}
+    button.ghost{background:#0b102000;border-color:#223163}
+    button.ok{background:linear-gradient(180deg,#22c55e,#16a34a);border-color:#34d399;color:#052316}
+    button.warn{background:linear-gradient(180deg,#f59e0b,#d97706);border-color:#fbbf24;color:#2a1702}
+    button.danger{background:linear-gradient(180deg,#ef4444,#dc2626);border-color:#f87171;color:#2a0505}
+    video,canvas{width:100%;border-radius:14px;border:1px solid #1f2a4a;background:#0b1020}
+    .pill{display:inline-flex;align-items:center;gap:8px;padding:8px 10px;border-radius:999px;background:#0ea5e91a;border:1px solid #0ea5e955;color:#bae6fd}
+    .status{font-size:13px;color:var(--muted)}
+    .log{max-height:380px;overflow:auto;font-size:14px}
+    table{width:100%;border-collapse:collapse}
+    th,td{border-bottom:1px solid #1f2a4a;padding:8px 10px;text-align:left}
+    .small{font-size:12px;color:var(--muted)}
+    .footer{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;margin-top:8px}
+    .hint{font-size:12px;color:#a5b4fc}
+    .hidden{display:none}
+    .chip{display:inline-block;background:#1e293b;border:1px solid #334155;color:#cbd5e1;padding:2px 8px;border-radius:999px;margin-right:6px;font-size:12px}
+    .tag-ok{color:#d1fae5;background:#064e3ba0;border-color:#10b98180}
+    .tag-bad{color:#fee2e2;background:#7f1d1da0;border-color:#ef444480}
+    .flex-between{display:flex;justify-content:space-between;align-items:center}
   </style>
-  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@3.13.0/dist/tf.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
 </head>
-<body class="bg-gray-100 min-h-screen flex items-center justify-center p-4">
+<body>
+  <header>
+    <div class="row">
+      <h1>Absensi Wajah</h1>
+      <span class="badge">GitHub Pages • PWA-ready</span>
+    </div>
+    <div class="row small">
+      <span id="modeBadge" class="pill">Mode Data: <strong class="mono" id="dataMode">LOCAL</strong></span>
+    </div>
+  </header>
 
-  <div class="bg-white p-8 rounded-2xl shadow-xl w-full max-w-2xl transform transition-all duration-300 hover:scale-105">
-    <h1 class="text-3xl font-bold text-center text-gray-800 mb-6">Aplikasi Absensi Wajah</h1>
-
-    <!-- Kamera -->
-    <div id="video-container" class="relative w-full aspect-video bg-gray-900 rounded-xl overflow-hidden shadow-lg mb-4 flex items-center justify-center hidden">
-      <video id="video" autoplay muted class="w-full h-full object-cover"></video>
-      <canvas id="canvas" class="absolute inset-0 w-full h-full"></canvas>
-      <div id="loading-indicator" class="absolute text-white font-bold text-xl flex flex-col items-center">
-        <div class="animate-spin rounded-full h-12 w-12 border-4 border-white border-t-transparent"></div>
-        <p class="mt-2 text-sm">Memuat model...</p>
-      </div>
-      <div id="status-message" class="absolute bottom-4 text-white text-sm bg-gray-800 bg-opacity-70 px-3 py-1 rounded-full">
-        Menunggu deteksi wajah...
-      </div>
+  <main>
+    <div class="tabs">
+      <div class="tab active" data-tab="register">Daftar Wajah</div>
+      <div class="tab" data-tab="attendance">Absensi</div>
+      <div class="tab" data-tab="logs">Log</div>
+      <div class="tab" data-tab="settings">Pengaturan</div>
     </div>
 
-    <!-- Input + Tombol -->
-    <div id="controls" class="flex flex-col space-y-4">
-      <input type="text" id="employee-name" placeholder="Masukkan Nama Karyawan" class="w-full p-3 border-2 border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 transition-shadow">
-      <button id="register-btn" class="w-full bg-green-600 text-white font-bold py-3 px-6 rounded-xl shadow-lg hover:bg-green-700 transition-all duration-300 transform hover:-translate-y-1 active:scale-95 disabled:bg-gray-400 disabled:cursor-not-allowed">
-        Daftar Wajah
-      </button>
-      <div class="grid grid-cols-2 gap-4">
-        <button id="check-in-btn" class="w-full bg-blue-600 text-white font-bold py-3 px-6 rounded-xl shadow-lg hover:bg-blue-700 transition-all duration-300 transform hover:-translate-y-1 active:scale-95 disabled:bg-gray-400 disabled:cursor-not-allowed">
-          Absen Masuk
-        </button>
-        <button id="check-out-btn" class="w-full bg-orange-600 text-white font-bold py-3 px-6 rounded-xl shadow-lg hover:bg-orange-700 transition-all duration-300 transform hover:-translate-y-1 active:scale-95 disabled:bg-gray-400 disabled:cursor-not-allowed">
-          Absen Pulang
-        </button>
+    <section id="register" class="grid">
+      <div class="card">
+        <h2>1) Kamera & Model</h2>
+        <div class="body">
+          <div class="row">
+            <button id="btnStartCamReg" class="primary">Nyalakan Kamera (Depan)</button>
+            <button id="btnStopCamReg" class="ghost">Matikan Kamera</button>
+            <span class="status" id="statusCamReg">Matikan</span>
+          </div>
+          <div class="row" style="margin-top:10px">
+            <button id="btnLoadModel" class="primary">Muat Model Wajah</button>
+            <span class="status" id="statusModel">Belum dimuat</span>
+          </div>
+          <div style="margin-top:12px">
+            <video id="videoReg" playsinline autoplay muted></video>
+            <canvas id="overlayReg" class="hidden"></canvas>
+          </div>
+        </div>
       </div>
-    </div>
 
-    <!-- Tabel Riwayat -->
-    <div class="mt-8">
-      <h2 class="text-2xl font-bold text-gray-800 mb-4 text-center">Riwayat Absensi</h2>
-      <div class="bg-gray-50 rounded-xl p-4 shadow-inner max-h-96 overflow-y-auto">
-        <table class="w-full text-left table-auto">
-          <thead>
-            <tr class="bg-gray-200 text-gray-700 uppercase text-sm leading-normal">
-              <th class="py-3 px-6 text-center">Nama</th>
-              <th class="py-3 px-6 text-center">Waktu Masuk</th>
-              <th class="py-3 px-6 text-center">Waktu Pulang</th>
-            </tr>
-          </thead>
-          <tbody id="attendance-list" class="text-gray-600 text-sm font-light"></tbody>
-        </table>
+      <div class="card">
+        <h2>2) Pendaftaran Karyawan</h2>
+        <div class="body">
+          <div class="row">
+            <input id="inpName" type="text" placeholder="Nama karyawan (unik)" />
+            <input id="inpEmployeeId" type="text" placeholder="ID/NIK (opsional)" />
+            <select id="inpSamples">
+              <option value="10">10 sampel</option>
+              <option value="15" selected>15 sampel</option>
+              <option value="20">20 sampel</option>
+            </select>
+          </div>
+          <div class="row" style="margin-top:10px">
+            <button id="btnCapture" class="ok">Mulai Kumpulkan Sampel</button>
+            <button id="btnSavePerson" class="primary">Simpan ke Database</button>
+            <button id="btnResetPerson" class="danger">Reset Draft</button>
+          </div>
+          <p class="small" id="statusEnroll">Belum ada sampel.</p>
+          <div class="row">
+            <div class="chip">Sampel: <span id="sampleCount">0</span></div>
+            <div class="chip">Terakhir: <span id="lastQuality">n/a</span></div>
+          </div>
+        </div>
       </div>
-    </div>
-  </div>
+    </section>
 
-  <!-- Script utama -->
-  <script type="module">
-    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.6.0/firebase-app.js";
-    import { getAuth, signInAnonymously, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/10.6.0/firebase-auth.js";
-    import { getFirestore, collection, addDoc, onSnapshot, serverTimestamp, doc, setDoc, query, where, updateDoc, getDocs } from "https://www.gstatic.com/firebasejs/10.6.0/firebase-firestore.js";
+    <section id="attendance" class="grid hidden">
+      <div class="card">
+        <h2>Face Recognition</h2>
+        <div class="body">
+          <div class="row">
+            <button id="btnStartCamAtt" class="primary">Nyalakan Kamera (Depan)</button>
+            <button id="btnStopCamAtt" class="ghost">Matikan Kamera</button>
+            <span class="status" id="statusCamAtt">Matikan</span>
+          </div>
+          <div class="row" style="margin-top:10px">
+            <button id="btnSyncEmployees" class="ghost">Muat Data Karyawan</button>
+            <span class="status" id="statusEmp">0 karyawan siap</span>
+          </div>
+          <div style="margin-top:12px">
+            <video id="videoAtt" playsinline autoplay muted></video>
+            <canvas id="overlayAtt" class="hidden"></canvas>
+          </div>
+          <div class="footer">
+            <div>
+              <span class="chip">Deteksi: <span id="detStatus">-</span></span>
+              <span class="chip">Terkunci: <span id="lockStatus">-</span></span>
+              <span class="chip">Threshold: <span id="threshVal">0.35</span></span>
+            </div>
+            <div class="row">
+              <button id="btnCheckIn" class="ok">Check-In</button>
+              <button id="btnCheckOut" class="warn">Check-Out</button>
+            </div>
+          </div>
+          <p class="hint">Tips: Hadapkan wajah tegak lurus, cahaya cukup, hindari backlight. Gunakan jaringan HTTPS (GitHub Pages sudah HTTPS) agar kamera bisa diakses.</p>
+        </div>
+      </div>
 
-    const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
-    const firebaseConfig = JSON.parse(typeof __firebase_config !== 'undefined' ? __firebase_config : '{}');
-    const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+      <div class="card">
+        <h2>Hasil Identifikasi</h2>
+        <div class="body">
+          <div id="resultBox">Belum ada.</div>
+        </div>
+      </div>
+    </section>
 
-    const app = initializeApp(firebaseConfig);
-    const db = getFirestore(app);
-    const auth = getAuth(app);
+    <section id="logs" class="grid hidden">
+      <div class="card">
+        <h2>Riwayat Absensi</h2>
+        <div class="body">
+          <div class="row">
+            <button id="btnRefreshLogs" class="ghost">Muat Ulang</button>
+            <button id="btnExportCSV" class="primary">Export CSV</button>
+          </div>
+          <div class="log" id="logTable"></div>
+        </div>
+      </div>
 
-    const video = document.getElementById('video');
-    const canvas = document.getElementById('canvas');
-    const videoContainer = document.getElementById('video-container');
-    const checkInBtn = document.getElementById('check-in-btn');
-    const checkOutBtn = document.getElementById('check-out-btn');
-    const registerBtn = document.getElementById('register-btn');
-    const employeeNameInput = document.getElementById('employee-name');
-    const loadingIndicator = document.getElementById('loading-indicator');
-    const statusMessage = document.getElementById('status-message');
-    const attendanceList = document.getElementById('attendance-list');
-    const allButtons = [registerBtn, checkInBtn, checkOutBtn];
+      <div class="card">
+        <h2>Data Karyawan</h2>
+        <div class="body">
+          <div class="row">
+            <button id="btnListEmployees" class="ghost">Lihat Daftar</button>
+          </div>
+          <div class="log" id="empList"></div>
+        </div>
+      </div>
+    </section>
 
-    let attendanceAction = null;
-    let detectionInterval;
-    let faceMatcher = null;
-    let stream = null;
-    const FACE_THRESHOLD = 0.6;
+    <section id="settings" class="grid hidden">
+      <div class="card">
+        <h2>Sinkronisasi (Opsional: Firebase)</h2>
+        <div class="body">
+          <p class="small">Aplikasi ini bekerja <strong>tanpa server</strong> (LOCAL) dan dapat di-host di GitHub Pages. Agar data karyawan & log terbaca di semua HP, isi konfigurasi Firebase Anda.
+          </p>
+          <details>
+            <summary>Cara mengaktifkan Firebase</summary>
+            <ol class="small">
+              <li>Buat project di Firebase Console → aktifkan Firestore (mode produksi) & Storage (opsional).</li>
+              <li>Buat Web App → salin konfigurasi dan tempelkan di bagian <span class="mono">const firebaseConfig</span> (di bawah).</li>
+              <li>Di Firestore buat rules produksi seperlunya (default sudah cukup untuk demo). Gunakan <em>Authentication: Anonymous</em> agar mudah.</li>
+            </ol>
+          </details>
+          <div class="row" style="margin-top:8px">
+            <button id="btnInitFirebase" class="primary">Inisialisasi Firebase</button>
+            <button id="btnAnonLogin" class="ghost">Login Anonymous</button>
+            <span class="status" id="statusFb">Belum aktif</span>
+          </div>
+          <p class="hint">Jika Firebase tidak aktif, Mode Data = LOCAL (hanya tersimpan di perangkat ini). Jika aktif, data disimpan di Cloud Firestore.</p>
+        </div>
+      </div>
 
-    const modelsUrl = 'https://koaladumb.github.io/absen-nonasn/models';
-    Promise.all([
-      faceapi.nets.tinyFaceDetector.loadFromUri(modelsUrl),
-      faceapi.nets.faceLandmark68Net.loadFromUri(modelsUrl),
-      faceapi.nets.faceRecognitionNet.loadFromUri(modelsUrl)
-    ]).then(() => {
-      loadingIndicator.style.display = 'none';
-      statusMessage.textContent = 'Model siap. Silakan klik tombol absen.';
-    }).catch(err => {
-      console.error("Kesalahan saat memuat model: ", err);
-      statusMessage.textContent = 'Gagal memuat model pengenalan wajah.';
-      loadingIndicator.style.display = 'none';
-    });
+      <div class="card">
+        <h2>Preferensi</h2>
+        <div class="body">
+          <div class="row">
+            <label>Ambang pengenalan (0.25–0.6): <input id="inpThreshold" type="number" min="0.25" max="0.6" step="0.01" value="0.35" style="width:120px"></label>
+            <button id="btnSavePrefs" class="ghost">Simpan</button>
+          </div>
+          <p class="small">Semakin kecil nilai, semakin ketat (lebih sedikit false positive).</p>
+        </div>
+      </div>
+    </section>
+  </main>
 
-    function startVideo() {
-      videoContainer.classList.remove('hidden');
-      allButtons.forEach(btn => {
-        btn.disabled = (btn.id !== attendanceAction);
+  <!-- Libraries -->
+  <script src="https://cdn.jsdelivr.net/npm/@vladmandic/human/dist/human.js"></script>
+
+  <!-- Firebase (optional; module) -->
+  <script type="module" id="fb-mod">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+    import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+    import { getFirestore, doc, setDoc, getDoc, getDocs, collection, addDoc, query, where, orderBy, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+
+    // ===== Expose minimal Firebase bridge to window =====
+    window.FirebaseBridge = {
+      app: null, auth: null, db: null, uid: null,
+      async init(config){
+        try{
+          this.app = initializeApp(config);
+          this.auth = getAuth(this.app);
+          this.db = getFirestore(this.app);
+          window.setFbStatus('Firebase diinisialisasi');
+          return true;
+        }catch(e){
+          console.error(e);
+          window.setFbStatus('Gagal init Firebase');
+          return false;
+        }
+      },
+      async anonLogin(){
+        if(!this.auth){window.setFbStatus('Auth belum siap');return null}
+        try{
+          await signInAnonymously(this.auth);
+          return new Promise((resolve)=>{
+            onAuthStateChanged(this.auth,(user)=>{
+              if(user){ this.uid = user.uid; window.setFbStatus('Anon login: '+user.uid.substring(0,6)+'…'); resolve(user)}
+            });
+          });
+        }catch(e){ console.error(e); window.setFbStatus('Login gagal'); return null }
+      },
+      async saveEmployee(name, employeeId, descriptors){
+        const db = this.db; if(!db) return false;
+        const ref = doc(db, 'employees', name);
+        await setDoc(ref, { name, employeeId: employeeId||null, descriptors, updatedAt: serverTimestamp() });
+        return true;
+      },
+      async listEmployees(){
+        const db=this.db; if(!db) return [];
+        const snap = await getDocs(collection(db,'employees'));
+        return snap.docs.map(d=>d.data());
+      },
+      async loadEmployee(name){
+        const db=this.db; if(!db) return null;
+        const ref = doc(db,'employees',name);
+        const s = await getDoc(ref); return s.exists()? s.data() : null;
+      },
+      async logAttendance(record){
+        const db=this.db; if(!db) return false;
+        await addDoc(collection(db,'attendance'), { ...record, createdAt: serverTimestamp() });
+        return true;
+      },
+      async listLogs(){
+        const db=this.db; if(!db) return [];
+        const q = query(collection(db,'attendance'), orderBy('createdAt','desc'));
+        const snap = await getDocs(q);
+        return snap.docs.map(d=>({id:d.id, ...d.data()}));
+      }
+    };
+  </script>
+
+  <script>
+    // ===== Utilities =====
+    const $ = (sel)=>document.querySelector(sel);
+    const fmtTime = (d)=> new Date(d).toLocaleString();
+    const sleep = (ms)=>new Promise(r=>setTimeout(r,ms));
+
+    // Preferences
+    const Prefs = {
+      threshold: parseFloat(localStorage.getItem('threshold')||'0.35'),
+      set(k,v){ this[k]=v; localStorage.setItem(k, String(v)); $('#threshVal').textContent = String(this.threshold); },
+    };
+    $('#inpThreshold').value = Prefs.threshold;
+    $('#threshVal').textContent = String(Prefs.threshold);
+
+    // Data mode flags
+    let DATA_MODE = 'LOCAL'; // or 'FIREBASE'
+    function updateModeBadge(){ $('#dataMode').textContent = DATA_MODE; }
+    updateModeBadge();
+
+    // Simple LOCAL stores
+    const LocalDB = {
+      keyEmployees: 'employees',
+      keyLogs: 'logs',
+      getEmployees(){ try{return JSON.parse(localStorage.getItem(this.keyEmployees)||'[]')}catch{return []} },
+      setEmployees(list){ localStorage.setItem(this.keyEmployees, JSON.stringify(list)); },
+      upsertEmployee(emp){ const list=this.getEmployees(); const i=list.findIndex(e=>e.name===emp.name); if(i>=0) list[i]=emp; else list.push(emp); this.setEmployees(list); },
+      listLogs(){ try{return JSON.parse(localStorage.getItem(this.keyLogs)||'[]')}catch{return []} },
+      addLog(item){ const list=this.listLogs(); list.unshift(item); localStorage.setItem(this.keyLogs, JSON.stringify(list)); },
+    };
+
+    // Firebase helpers hookup from module script
+    window.setFbStatus = (t)=>{ $('#statusFb').textContent = t; $('#modeBadge').classList.remove('tag-bad'); };
+
+    // ===== Tabs =====
+    document.querySelectorAll('.tab').forEach(t=>{
+      t.addEventListener('click',()=>{
+        document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));
+        t.classList.add('active');
+        const target = t.dataset.tab;
+        document.querySelectorAll('main > section').forEach(sec=> sec.classList.add('hidden'));
+        $('#'+target).classList.remove('hidden');
       });
+    });
 
-      navigator.mediaDevices.getUserMedia({ video: {} })
-        .then(s => {
-          stream = s;
-          video.srcObject = stream;
-          video.addEventListener('play', detectFaces);
-        })
-        .catch(err => {
-          console.error("Kesalahan saat mengakses kamera: ", err);
-          statusMessage.textContent = 'Gagal mengakses kamera. Mohon berikan izin.';
-          stopVideo();
-        });
+    // ===== Camera =====
+    let streamReg=null, streamAtt=null;
+    async function startCamera(el, statusEl){
+      try{
+        const stream = await navigator.mediaDevices.getUserMedia({ video: {facingMode: 'user', width:{ideal:640}, height:{ideal:480}}, audio:false });
+        el.srcObject = stream; (statusEl||{textContent:''}).textContent = 'Nyala';
+        return stream;
+      }catch(e){ console.error(e); (statusEl||{textContent:''}).textContent = 'Gagal akses kamera'; alert('Gagal akses kamera: '+e.message); return null; }
+    }
+    function stopCamera(stream, statusEl){ if(stream){ stream.getTracks().forEach(t=>t.stop()); (statusEl||{textContent:''}).textContent='Matikan'; } }
+
+    $('#btnStartCamReg').onclick = async()=>{ streamReg = await startCamera($('#videoReg'), $('#statusCamReg')); };
+    $('#btnStopCamReg').onclick = ()=>{ stopCamera(streamReg,$('#statusCamReg')); };
+    $('#btnStartCamAtt').onclick = async()=>{ streamAtt = await startCamera($('#videoAtt'), $('#statusCamAtt')); };
+    $('#btnStopCamAtt').onclick = ()=>{ stopCamera(streamAtt,$('#statusCamAtt')); };
+
+    // ===== Human (face) =====
+    const human = new Human({
+      backend: 'webgl',
+      cacheSensitivity: 0,
+      async: true,
+      modelBasePath: 'https://cdn.jsdelivr.net/npm/@vladmandic/human/models',
+      face: { enabled: true, detector: { rotation: true, maxDetected: 1 }, mesh: true, iris: false, description: true, emotion: false, antispoof: true, liveness: true },
+    });
+
+    let modelLoaded = false;
+    $('#btnLoadModel').onclick = async()=>{
+      $('#statusModel').textContent = 'Memuat…';
+      await human.load();
+      await human.warmup();
+      modelLoaded = true;
+      $('#statusModel').textContent = 'Siap';
+    };
+
+    // ===== Enrollment (collect samples) =====
+    let draftSamples = []; // array of embeddings
+    let lastQuality = 0;
+
+    function cosine(a,b){ let s=0, sa=0, sb=0; for(let i=0;i<a.length;i++){ s+=a[i]*b[i]; sa+=a[i]*a[i]; sb+=b[i]*b[i]; } return s/(Math.sqrt(sa)*Math.sqrt(sb)); }
+    function distance(a,b){ return 1 - cosine(a,b); }
+
+    async function captureLoop(){
+      const video = $('#videoReg');
+      const canvas = $('#overlayReg');
+      if(!modelLoaded){ alert('Model belum dimuat'); return; }
+      if(!video.srcObject){ alert('Kamera belum dinyalakan'); return; }
+      const want = parseInt($('#inpSamples').value,10);
+      $('#statusEnroll').textContent = 'Mengumpulkan sampel… harap tatap kamera & ubah sedikit sudut.';
+      draftSamples = [];
+      for(let i=0;i<want;i++){
+        const res = await human.detect(video);
+        if(res.face?.length){
+          const f = res.face[0];
+          lastQuality = Math.round((f.quality || 0)*100);
+          if(f.embedding && f.embedding.length){ draftSamples.push(Array.from(f.embedding)); }
+          $('#sampleCount').textContent = String(draftSamples.length);
+          $('#lastQuality').textContent = lastQuality+'%';
+        }
+        await sleep(350);
+      }
+      if(draftSamples.length < Math.max(5, want*0.6)){
+        $('#statusEnroll').innerHTML = '<span class="tag-bad chip">Sampel kurang atau kualitas rendah. Ulangi.</span>';
+      }else{
+        $('#statusEnroll').innerHTML = '<span class="tag-ok chip">Sampel OK. Simpan untuk mendaftarkan karyawan.</span>';
+      }
     }
 
-    function stopVideo() {
-      if (stream) {
-        stream.getTracks().forEach(track => track.stop());
-        video.srcObject = null;
+    $('#btnCapture').onclick = captureLoop;
+    $('#btnResetPerson').onclick = ()=>{ draftSamples=[]; $('#sampleCount').textContent='0'; $('#lastQuality').textContent='n/a'; $('#statusEnroll').textContent='Draft direset.' };
+
+    $('#btnSavePerson').onclick = async()=>{
+      const name = $('#inpName').value.trim();
+      const employeeId = $('#inpEmployeeId').value.trim();
+      if(!name){ alert('Nama wajib diisi (unik).'); return; }
+      if(draftSamples.length<5){ alert('Kumpulkan sampel lebih dulu.'); return; }
+      const person = { name, employeeId: employeeId||null, descriptors: draftSamples };
+      if(DATA_MODE==='FIREBASE' && window.FirebaseBridge?.db){
+        await window.FirebaseBridge.saveEmployee(name, employeeId, draftSamples);
+      }else{
+        LocalDB.upsertEmployee(person);
       }
-      clearInterval(detectionInterval);
-      videoContainer.classList.add('hidden');
-      statusMessage.textContent = 'Menunggu deteksi wajah...';
-      attendanceAction = null;
-      allButtons.forEach(btn => btn.disabled = false);
+      alert('Karyawan tersimpan: '+name);
+      draftSamples=[]; $('#sampleCount').textContent='0'; $('#lastQuality').textContent='n/a'; $('#statusEnroll').textContent='Tersimpan.';
+      await syncEmployees();
+    };
+
+    // ===== Recognition / Attendance =====
+    let knownEmployees = [];
+    async function syncEmployees(){
+      if(DATA_MODE==='FIREBASE' && window.FirebaseBridge?.db){
+        knownEmployees = await window.FirebaseBridge.listEmployees();
+      }else{
+        knownEmployees = LocalDB.getEmployees();
+      }
+      $('#statusEmp').textContent = knownEmployees.length + ' karyawan siap';
     }
+    $('#btnSyncEmployees').onclick = syncEmployees;
 
-    // Pendaftaran wajah
-    registerBtn.addEventListener('click', async () => {
-      const employeeName = employeeNameInput.value.trim();
-      if (!employeeName) {
-        statusMessage.textContent = 'Nama karyawan harus diisi untuk pendaftaran.';
-        return;
-      }
+    let currentMatch = null; // {name, distance}
+    let lockedUntil = 0;
 
-      attendanceAction = 'register-btn';
-      startVideo();
-      statusMessage.textContent = 'Memindai wajah... Mohon tetap di depan kamera.';
-
-      setTimeout(async () => {
-        const detectionWithDescriptor = await faceapi.detectSingleFace(video, new faceapi.TinyFaceDetectorOptions()).withFaceLandmarks().withFaceDescriptor();
-
-        if (!detectionWithDescriptor) {
-          statusMessage.textContent = 'Tidak ada wajah yang terdeteksi. Silakan posisikan wajah Anda di depan kamera.';
-          stopVideo();
-          return;
-        }
-
-        try {
-          const userId = getUserId();
-          const faceId = employeeName.replace(/\s+/g, '-').toLowerCase();
-          const faceProfileRef = doc(collection(db, getFaceProfileCollectionPath()), faceId);
-
-          await setDoc(faceProfileRef, {
-            name: employeeName,
-            descriptor: JSON.stringify(Array.from(detectionWithDescriptor.descriptor)),
-            timestamp: serverTimestamp()
-          });
-          statusMessage.textContent = `Wajah ${employeeName} berhasil didaftarkan!`;
-          employeeNameInput.value = '';
-        } catch (e) {
-          console.error("Error registering face: ", e);
-          statusMessage.textContent = 'Gagal mendaftarkan wajah.';
-        }
-        stopVideo();
-      }, 5000);
-    });
-
-    // Absen masuk
-    checkInBtn.addEventListener('click', async () => {
-      const employeeName = employeeNameInput.value.trim();
-      if (!employeeName) {
-        statusMessage.textContent = 'Nama karyawan harus diisi.';
-        return;
-      }
-      attendanceAction = 'check-in-btn';
-      startVideo();
-      statusMessage.textContent = 'Mencari wajah untuk Absen Masuk...';
-    });
-
-    // Absen pulang
-    checkOutBtn.addEventListener('click', async () => {
-      const employeeName = employeeNameInput.value.trim();
-      if (!employeeName) {
-        statusMessage.textContent = 'Nama karyawan harus diisi.';
-        return;
-      }
-      attendanceAction = 'check-out-btn';
-      startVideo();
-      statusMessage.textContent = 'Mencari wajah untuk Absen Pulang...';
-    });
-
-    async function detectFaces() {
-      detectionInterval = setInterval(async () => {
-        if (!faceMatcher) return;
-
-        const detections = await faceapi.detectSingleFace(video, new faceapi.TinyFaceDetectorOptions()).withFaceLandmarks().withFaceDescriptor();
-
-        if (detections) {
-          const bestMatch = faceMatcher.findBestMatch(detections.descriptor);
-          const recognizedName = bestMatch.label;
-          const distance = bestMatch.distance;
-
-          if (recognizedName !== 'unknown' && distance < FACE_THRESHOLD) {
-            employeeNameInput.value = recognizedName;
-            statusMessage.textContent = `Wajah dikenali: ${recognizedName}. Merekam absensi...`;
-            handleAttendance(recognizedName);
-          } else {
-            statusMessage.textContent = 'Wajah tidak dikenal. Silakan daftar terlebih dahulu.';
+    async function recognizeLoop(){
+      const video = $('#videoAtt');
+      if(!modelLoaded){ $('#detStatus').textContent='Model belum dimuat'; return; }
+      if(!video.srcObject){ $('#detStatus').textContent='Kamera mati'; return; }
+      const now = performance.now();
+      const res = await human.detect(video);
+      if(res.face?.length){
+        $('#detStatus').textContent = 'Wajah terdeteksi';
+        const f = res.face[0];
+        const emb = f.embedding;
+        if(emb && knownEmployees.length){
+          let best = {name:null, dist: 9};
+          for(const emp of knownEmployees){
+            for(const d of emp.descriptors){
+              const dist = distance(emb, d);
+              if(dist < best.dist){ best = {name: emp.name, dist}; }
+            }
           }
-        } else {
-          statusMessage.textContent = 'Menunggu deteksi wajah...';
-        }
-      }, 500);
-    }
-
-    async function handleAttendance(recognizedName) {
-      if (!attendanceAction) return;
-
-      try {
-        if (attendanceAction === 'check-in-btn') {
-          await addDoc(collection(db, getCollectionPath()), {
-            name: recognizedName,
-            checkInTime: serverTimestamp(),
-            checkOutTime: null
-          });
-          statusMessage.textContent = 'Absensi masuk berhasil!';
-        } else if (attendanceAction === 'check-out-btn') {
-          const q = query(collection(db, getCollectionPath()), where('name', '==', recognizedName), where('checkOutTime', '==', null));
-          const querySnapshot = await getDocs(q);
-
-          if (querySnapshot.empty) {
-            statusMessage.textContent = 'Tidak ada data absensi masuk yang ditemukan atau sudah absen pulang.';
-            return;
+          const th = Prefs.threshold;
+          $('#threshVal').textContent = th.toFixed(2);
+          if(best.name && best.dist <= th){
+            currentMatch = {name: best.name, distance: best.dist};
+            $('#lockStatus').textContent = 'MATCH';
+            $('#resultBox').innerHTML = `<div class="chip tag-ok">${best.name} • jarak ${best.dist.toFixed(3)}</div>`;
+          }else{
+            currentMatch = null;
+            $('#lockStatus').textContent = 'NO MATCH';
+            $('#resultBox').textContent = 'Tidak cocok. Pastikan wajah dekat & terang.';
           }
-
-          const latestDoc = querySnapshot.docs.reduce((latest, current) => {
-            return (latest.data().checkInTime.toDate() > current.data().checkInTime.toDate()) ? latest : current;
-          });
-          await updateDoc(doc(db, getCollectionPath(), latestDoc.id), {
-            checkOutTime: serverTimestamp()
-          });
-          statusMessage.textContent = 'Absensi pulang berhasil!';
         }
-      } catch (e) {
-        console.error("Error storing attendance: ", e);
-        statusMessage.textContent = 'Gagal menyimpan absensi.';
-      } finally {
-        stopVideo();
+      }else{
+        $('#detStatus').textContent = 'Tidak ada wajah';
       }
+      const delay = (now < lockedUntil) ? 600 : 220; // adaptive speed
+      setTimeout(recognizeLoop, delay);
     }
 
-    async function authenticate() {
-      try {
-        if (initialAuthToken) {
-          await signInWithCustomToken(auth, initialAuthToken);
-          console.log("Berhasil autentikasi dengan token kustom.");
-        } else {
-          await signInAnonymously(auth);
-          console.log("Berhasil autentikasi secara anonim.");
-        }
-      } catch (error) {
-        console.error("Kesalahan saat autentikasi:", error);
+    // Start recognition loop when camera starts
+    $('#btnStartCamAtt').addEventListener('click', ()=> setTimeout(recognizeLoop, 500));
+
+    async function logAttendance(type){
+      if(!currentMatch){ alert('Belum ada wajah yang cocok.'); return; }
+      const rec = { type, name: currentMatch.name, distance: Number(currentMatch.distance.toFixed(4)), at: Date.now() };
+      if(DATA_MODE==='FIREBASE' && window.FirebaseBridge?.db){ await window.FirebaseBridge.logAttendance(rec); }
+      else { LocalDB.addLog(rec); }
+      lockedUntil = performance.now() + 3000; // avoid double click
+      alert(`${type} tersimpan untuk ${rec.name}`);
+      await refreshLogs();
+    }
+    $('#btnCheckIn').onclick = ()=>logAttendance('IN');
+    $('#btnCheckOut').onclick = ()=>logAttendance('OUT');
+
+    // ===== Logs & Export =====
+    async function refreshLogs(){
+      let rows = [];
+      if(DATA_MODE==='FIREBASE' && window.FirebaseBridge?.db){ rows = await window.FirebaseBridge.listLogs(); }
+      else { rows = LocalDB.listLogs(); }
+      if(!rows.length){ $('#logTable').innerHTML = '<p class="small">Belum ada data.</p>'; return; }
+      const html = [`<table><thead><tr><th>Waktu</th><th>Nama</th><th>Jenis</th><th>Jarak</th></tr></thead><tbody>`]
+      for(const r of rows){ html.push(`<tr><td>${fmtTime(r.createdAt?.toDate?.()||r.at)}</td><td>${r.name}</td><td>${r.type}</td><td>${(r.distance??'-')}</td></tr>`); }
+      html.push('</tbody></table>');
+      $('#logTable').innerHTML = html.join('');
+    }
+    $('#btnRefreshLogs').onclick = refreshLogs;
+
+    $('#btnExportCSV').onclick = async()=>{
+      let rows = [];
+      if(DATA_MODE==='FIREBASE' && window.FirebaseBridge?.db){ rows = await window.FirebaseBridge.listLogs(); }
+      else { rows = LocalDB.listLogs(); }
+      const head = ['timestamp','datetime','name','type','distance'];
+      const lines = [head.join(',')];
+      for(const r of rows){
+        const t = (r.createdAt?.toDate?.()||new Date(r.at));
+        const row = [ +t, t.toISOString(), r.name, r.type, r.distance??'' ].map(x=>`"${String(x).replaceAll('"','""')}"`).join(',');
+        lines.push(row);
       }
+      const blob = new Blob([lines.join('\n')], {type:'text/csv'});
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a'); a.href=url; a.download='attendance.csv'; a.click(); URL.revokeObjectURL(url);
+    };
+
+    $('#btnListEmployees').onclick = async()=>{
+      await syncEmployees();
+      if(!knownEmployees.length){ $('#empList').innerHTML = '<p class="small">Belum ada data.</p>'; return; }
+      const html = [`<table><thead><tr><th>Nama</th><th>ID</th><th>#Sampel</th></tr></thead><tbody>`]
+      for(const e of knownEmployees){ html.push(`<tr><td>${e.name}</td><td>${e.employeeId||''}</td><td>${(e.descriptors?.length||0)}</td></tr>`); }
+      html.push('</tbody></table>');
+      $('#empList').innerHTML = html.join('');
+    };
+
+    // ===== Settings =====
+    $('#btnSavePrefs').onclick = ()=>{ const th=parseFloat($('#inpThreshold').value); if(th>=0.25 && th<=0.6){ Prefs.set('threshold', th); alert('Disimpan'); } else { alert('Nilai harus 0.25–0.6'); } };
+
+    // ===== Firebase Controls =====
+    $('#btnInitFirebase').onclick = async()=>{
+      const config = firebaseConfig; // defined below by user
+      if(!config || !config.apiKey){ alert('Isi firebaseConfig lebih dulu di bagian bawah file.'); return; }
+      const ok = await window.FirebaseBridge.init(config);
+      if(ok){ DATA_MODE='FIREBASE'; updateModeBadge(); }
+    };
+    $('#btnAnonLogin').onclick = async()=>{ if(window.FirebaseBridge?.auth){ await window.FirebaseBridge.anonLogin(); } else { alert('Init Firebase dulu.'); } };
+
+    // ===== PWA: Allow install/add-to-home (optional) =====
+    if('serviceWorker' in navigator){
+      window.addEventListener('load', ()=>{
+        navigator.serviceWorker.register('sw.js').catch(()=>{});
+      });
     }
 
-    function getUserId() {
-      return auth.currentUser?.uid || 'anonim';
-    }
+    // ===== First sync on load =====
+    (async()=>{ try{ await syncEmployees(); await refreshLogs(); }catch(_){ /* ignore */ } })();
 
-    function getCollectionPath() {
-      return `/artifacts/${firebaseConfig.projectId}/users/${getUserId()}/absensi-wajah`;
-    }
+    // ======= USER: paste your firebaseConfig below (or leave empty for LOCAL mode) =======
+    // Example:
+    // const firebaseConfig = { apiKey:"...", authDomain:"...", projectId:"...", storageBucket:"...", messagingSenderId:"...", appId:"..." };
+    const firebaseConfig = {};
+  </script>
 
-    function getFaceProfileCollectionPath() {
-      return `/artifacts/${firebaseConfig.projectId}/users/${getUserId()}/face-profiles`;
-    }
-
-    // Listen Firebase
-    auth.onAuthStateChanged(user => {
-      if (user) {
-        onSnapshot(collection(db, getCollectionPath()), (snapshot) => {
-          attendanceList.innerHTML = '';
-          snapshot.forEach((doc) => {
-            const data = doc.data();
-            const row = document.createElement('tr');
-            row.className = 'border-b border-gray-200 hover:bg-gray-100 transition-colors';
-
-            const formattedCheckInTime = data.checkInTime ? new Date(data.checkInTime.seconds * 1000).toLocaleString('id-ID', { dateStyle: 'short', timeStyle: 'short' }) : 'N/A';
-            const formattedCheckOutTime = data.checkOutTime ? new Date(data.checkOutTime.seconds * 1000).toLocaleString('id-ID', { dateStyle: 'short', timeStyle: 'short' }) : 'Belum absen pulang';
-
-            row.innerHTML = `
-              <td class="py-3 px-6 text-center">${data.name}</td>
-              <td class="py-3 px-6 text-center">${formattedCheckInTime}</td>
-              <td class="py-3 px-6 text-center">${formattedCheckOutTime}</td>
-            `;
-            attendanceList.appendChild(row);
-          });
-        });
-
-        onSnapshot(collection(db, getFaceProfileCollectionPath()), (snapshot) => {
-          const labeledDescriptors = snapshot.docs.map(doc => {
-            const data = doc.data();
-            const descriptor = JSON.parse(data.descriptor);
-            return new faceapi.LabeledFaceDescriptors(data.name, [new Float32Array(descriptor)]);
-          });
-
-          faceMatcher = labeledDescriptors.length > 0 ? new faceapi.FaceMatcher(labeledDescriptors) : null;
-        });
-      }
+  <!-- Minimal SW inline (for GitHub Pages at root, save as sw.js automatically if exists). We'll also create at runtime if missing. -->
+  <script>
+    // Create a simple SW file at first load (if not present when hosting from root)
+    fetch('sw.js', {method:'HEAD'}).catch(async()=>{
+      const swCode = `self.addEventListener('install', e=>self.skipWaiting()); self.addEventListener('activate', e=>self.clients.claim());`;
+      const blob = new Blob([swCode], {type:'text/javascript'});
+      const a = document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='sw.js'; a.click(); URL.revokeObjectURL(a.href);
     });
-
-    authenticate();
   </script>
 </body>
 </html>
