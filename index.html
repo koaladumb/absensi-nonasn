@@ -39,7 +39,7 @@
         <div id="controls" class="flex flex-col space-y-4">
             <input type="text" id="employee-name" placeholder="Masukkan Nama Karyawan" class="w-full p-3 border-2 border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 transition-shadow">
             <button id="register-btn" class="w-full bg-green-600 text-white font-bold py-3 px-6 rounded-xl shadow-lg hover:bg-green-700 transition-all duration-300 transform hover:-translate-y-1 active:scale-95 disabled:bg-gray-400 disabled:cursor-not-allowed">
-                1. Daftar Wajah
+                Daftar Wajah
             </button>
             <div class="grid grid-cols-2 gap-4">
                  <button id="check-in-btn" class="w-full bg-blue-600 text-white font-bold py-3 px-6 rounded-xl shadow-lg hover:bg-blue-700 transition-all duration-300 transform hover:-translate-y-1 active:scale-95 disabled:bg-gray-400 disabled:cursor-not-allowed">
@@ -105,11 +105,12 @@
         let stream = null; // Menyimpan stream kamera
         const FACE_THRESHOLD = 0.6; // Batas toleransi untuk pengenalan wajah
 
-        // Muat model pengenalan wajah dari folder 'models'
+        // Muat model pengenalan wajah dari URL absolut
+        const modelsUrl = 'https://koaladumb.github.io/absen-nonasn/models';
         Promise.all([
-            faceapi.nets.tinyFaceDetector.loadFromUri('./models'),
-            faceapi.nets.faceLandmark68Net.loadFromUri('./models'),
-            faceapi.nets.faceRecognitionNet.loadFromUri('./models')
+            faceapi.nets.tinyFaceDetector.loadFromUri(modelsUrl),
+            faceapi.nets.faceLandmark68Net.loadFromUri(modelsUrl),
+            faceapi.nets.faceRecognitionNet.loadFromUri(modelsUrl)
         ]).then(() => {
             loadingIndicator.style.display = 'none';
             statusMessage.textContent = 'Model siap. Silakan klik tombol absen.';
@@ -250,8 +251,10 @@
                 alert('Nama karyawan harus diisi.');
                 return;
             }
+            startVideo(); // Mengaktifkan kamera saat tombol ditekan
             if (!isFaceDetected) {
                 alert('Tidak ada wajah yang terdeteksi.');
+                stopVideo();
                 return;
             }
 
@@ -278,8 +281,10 @@
                 alert('Nama karyawan harus diisi.');
                 return;
             }
+            startVideo(); // Mengaktifkan kamera saat tombol ditekan
             if (!isFaceDetected) {
                 alert('Tidak ada wajah yang terdeteksi.');
+                stopVideo();
                 return;
             }
 
