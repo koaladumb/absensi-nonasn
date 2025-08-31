@@ -98,8 +98,9 @@
         const loadingIndicator = document.getElementById('loading-indicator');
         const statusMessage = document.getElementById('status-message');
         const attendanceList = document.getElementById('attendance-list');
+        const allButtons = [registerBtn, checkInBtn, checkOutBtn];
 
-        let isFaceDetected = false;
+        let attendanceAction = null; // Menentukan apakah sedang absen masuk atau absen pulang
         let detectionInterval;
         let faceMatcher = null;
         let stream = null; // Menyimpan stream kamera
@@ -123,6 +124,13 @@
         // Memulai streaming video dari kamera
         function startVideo() {
             videoContainer.classList.remove('hidden');
+            // Menonaktifkan tombol lain
+            allButtons.forEach(btn => {
+                if (btn.id !== attendanceAction) {
+                    btn.disabled = true;
+                }
+            });
+
             navigator.mediaDevices.getUserMedia({ video: {} })
                 .then(s => {
                     stream = s;
@@ -132,6 +140,7 @@
                 .catch(err => {
                     console.error("Kesalahan saat mengakses kamera: ", err);
                     statusMessage.textContent = 'Gagal mengakses kamera. Mohon berikan izin.';
+                    stopVideo();
                 });
         }
         
@@ -144,24 +153,28 @@
             clearInterval(detectionInterval);
             videoContainer.classList.add('hidden');
             statusMessage.textContent = 'Menunggu deteksi wajah...';
-            isFaceDetected = false;
+            attendanceAction = null;
+            // Mengaktifkan kembali semua tombol
+            allButtons.forEach(btn => btn.disabled = false);
         }
 
         // Fungsi untuk pendaftaran wajah
         registerBtn.addEventListener('click', async () => {
             const employeeName = employeeNameInput.value.trim();
             if (!employeeName) {
-                alert('Nama karyawan harus diisi untuk pendaftaran.');
+                statusMessage.textContent = 'Nama karyawan harus diisi untuk pendaftaran.';
                 return;
             }
             
+            attendanceAction = 'register';
             startVideo(); // Mulai kamera untuk pendaftaran
-            statusMessage.textContent = 'Memindai wajah...';
-            setTimeout(async () => {
+            statusMessage.textContent = 'Memindai wajah... Mohon tetap di depan kamera.';
+            
+            const timeout = setTimeout(async () => {
                 const detectionWithDescriptor = await faceapi.detectSingleFace(video, new faceapi.TinyFaceDetectorOptions()).withFaceLandmarks().withFaceDescriptor();
 
                 if (!detectionWithDescriptor) {
-                    alert('Tidak ada wajah yang terdeteksi. Silakan posisikan wajah Anda di depan kamera.');
+                    statusMessage.textContent = 'Tidak ada wajah yang terdeteksi. Silakan posisikan wajah Anda di depan kamera.';
                     stopVideo();
                     return;
                 }
@@ -176,18 +189,18 @@
                         descriptor: JSON.stringify(Array.from(detectionWithDescriptor.descriptor)), // Simpan descriptor sebagai string JSON
                         timestamp: serverTimestamp()
                     });
-                    alert(`Wajah ${employeeName} berhasil didaftarkan!`);
+                    statusMessage.textContent = `Wajah ${employeeName} berhasil didaftarkan!`;
                     employeeNameInput.value = '';
                 } catch (e) {
                     console.error("Error registering face: ", e);
-                    alert('Gagal mendaftarkan wajah.');
+                    statusMessage.textContent = 'Gagal mendaftarkan wajah.';
                 }
                 stopVideo();
-            }, 3000); // Beri waktu 3 detik untuk memindai wajah
+            }, 5000); // Beri waktu 5 detik untuk memindai wajah
         });
 
         // Fungsi utama untuk deteksi dan pengenalan wajah
-        function detectFaces() {
+        async function detectFaces() {
             detectionInterval = setInterval(async () => {
                 if (!faceMatcher) {
                     return; // Tunggu faceMatcher dimuat
@@ -201,20 +214,55 @@
                     const distance = bestMatch.distance;
 
                     if (recognizedName !== 'unknown' && distance < FACE_THRESHOLD) {
-                        statusMessage.textContent = `Wajah dikenali: ${recognizedName}`;
                         employeeNameInput.value = recognizedName;
-                        isFaceDetected = true;
+                        statusMessage.textContent = `Wajah dikenali: ${recognizedName}. Merekam absensi...`;
+                        handleAttendance(recognizedName); // Panggil fungsi absensi saat wajah dikenali
                     } else {
                         statusMessage.textContent = 'Wajah tidak dikenal. Silakan daftar terlebih dahulu.';
-                        employeeNameInput.value = '';
-                        isFaceDetected = false;
                     }
                 } else {
                     statusMessage.textContent = 'Menunggu deteksi wajah...';
-                    employeeNameInput.value = '';
-                    isFaceDetected = false;
                 }
-            }, 100);
+            }, 500); // interval 500ms
+        }
+
+        async function handleAttendance(recognizedName) {
+            if (!attendanceAction) {
+                return; // Tidak ada tindakan absensi yang diminta
+            }
+
+            try {
+                const userId = getUserId();
+                if (attendanceAction === 'check-in') {
+                    await addDoc(collection(db, getCollectionPath()), {
+                        name: recognizedName,
+                        checkInTime: serverTimestamp(),
+                        checkOutTime: null
+                    });
+                    statusMessage.textContent = 'Absensi masuk berhasil!';
+                } else if (attendanceAction === 'check-out') {
+                    const q = query(collection(db, getCollectionPath()), where('name', '==', recognizedName), where('checkOutTime', '==', null));
+                    const querySnapshot = await getDocs(q);
+                    
+                    if (querySnapshot.empty) {
+                        statusMessage.textContent = 'Tidak ada data absensi masuk yang ditemukan atau sudah absen pulang.';
+                        return;
+                    }
+                    
+                    const latestDoc = querySnapshot.docs.reduce((latest, current) => {
+                        return (latest.data().checkInTime.toDate() > current.data().checkInTime.toDate()) ? latest : current;
+                    });
+                    await updateDoc(doc(db, getCollectionPath(), latestDoc.id), {
+                        checkOutTime: serverTimestamp()
+                    });
+                    statusMessage.textContent = 'Absensi pulang berhasil!';
+                }
+            } catch (e) {
+                console.error("Error storing attendance: ", e);
+                statusMessage.textContent = 'Gagal menyimpan absensi.';
+            } finally {
+                stopVideo();
+            }
         }
 
         // Autentikasi anonim ke Firebase
@@ -248,81 +296,24 @@
         checkInBtn.addEventListener('click', async () => {
             const employeeName = employeeNameInput.value.trim();
             if (!employeeName) {
-                alert('Nama karyawan harus diisi.');
+                statusMessage.textContent = 'Nama karyawan harus diisi.';
                 return;
             }
-            startVideo(); // Mengaktifkan kamera saat tombol ditekan
-            if (!isFaceDetected) {
-                alert('Tidak ada wajah yang terdeteksi.');
-                stopVideo();
-                return;
-            }
-
-            try {
-                const userId = getUserId();
-                await addDoc(collection(db, getCollectionPath()), {
-                    name: employeeName,
-                    checkInTime: serverTimestamp(),
-                    checkOutTime: null
-                });
-                alert('Absensi masuk berhasil!');
-                employeeNameInput.value = '';
-                stopVideo();
-            } catch (e) {
-                console.error("Error adding document: ", e);
-                alert('Gagal menyimpan absensi.');
-            }
+            attendanceAction = 'check-in';
+            startVideo();
+            statusMessage.textContent = 'Mencari wajah untuk Absen Masuk...';
         });
         
         // Event listener untuk tombol absen pulang
         checkOutBtn.addEventListener('click', async () => {
             const employeeName = employeeNameInput.value.trim();
             if (!employeeName) {
-                alert('Nama karyawan harus diisi.');
+                statusMessage.textContent = 'Nama karyawan harus diisi.';
                 return;
             }
-            startVideo(); // Mengaktifkan kamera saat tombol ditekan
-            if (!isFaceDetected) {
-                alert('Tidak ada wajah yang terdeteksi.');
-                stopVideo();
-                return;
-            }
-
-            try {
-                const userId = getUserId();
-                const q = query(collection(db, getCollectionPath()), where('name', '==', employeeName));
-                const querySnapshot = await getDocs(q);
-                
-                if (querySnapshot.empty) {
-                    alert('Tidak ada data absensi masuk yang ditemukan untuk karyawan ini.');
-                    return;
-                }
-                
-                let latestDoc = null;
-                querySnapshot.forEach(doc => {
-                    const data = doc.data();
-                    if (!data.checkOutTime) { // Cari dokumen yang belum absen pulang
-                        if (!latestDoc || (data.checkInTime.toDate() > latestDoc.data().checkInTime.toDate())) {
-                            latestDoc = doc;
-                        }
-                    }
-                });
-
-                if (latestDoc) {
-                    await updateDoc(doc(db, getCollectionPath(), latestDoc.id), {
-                        checkOutTime: serverTimestamp()
-                    });
-                    alert('Absensi pulang berhasil!');
-                    employeeNameInput.value = '';
-                    stopVideo();
-                } else {
-                    alert('Karyawan ini sudah absen pulang atau belum absen masuk.');
-                }
-
-            } catch (e) {
-                console.error("Error updating document: ", e);
-                alert('Gagal menyimpan absensi pulang.');
-            }
+            attendanceAction = 'check-out';
+            startVideo();
+            statusMessage.textContent = 'Mencari wajah untuk Absen Pulang...';
         });
 
 
@@ -357,7 +348,7 @@
                         return new faceapi.LabeledFaceDescriptors(data.name, [new Float32Array(descriptor)]);
                     });
                     
-                    // FIX: Perbaiki FaceMatcher untuk menghindari error
+                    // Perbaiki FaceMatcher untuk menghindari error
                     if (labeledDescriptors.length > 0) {
                         faceMatcher = new faceapi.FaceMatcher(labeledDescriptors);
                     } else {
