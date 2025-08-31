@@ -10,25 +10,7 @@
         body { font-family: 'Inter', sans-serif; }
         #video { transform: scaleX(-1); } /* Membalik video secara horizontal */
         canvas { position: absolute; }
-        .message-modal {
-            display: none;
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background-color: rgba(0,0,0,0.5);
-            z-index: 1000;
-            justify-content: center;
-            align-items: center;
-        }
-        .message-content {
-            background: white;
-            padding: 2rem;
-            border-radius: 1rem;
-            text-align: center;
-            max-width: 80%;
-        }
+        #video-container.hidden { display: none; }
     </style>
     <!-- Pustaka TensorFlow.js dan Face-API.js -->
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@3.13.0/dist/tf.min.js"></script>
@@ -36,20 +18,12 @@
 </head>
 <body class="bg-gray-100 min-h-screen flex items-center justify-center p-4">
 
-    <!-- Modal untuk pesan -->
-    <div id="message-modal" class="message-modal">
-        <div class="message-content">
-            <p id="modal-message"></p>
-            <button id="modal-close" class="mt-4 bg-blue-500 text-white px-4 py-2 rounded">Tutup</button>
-        </div>
-    </div>
-
     <!-- Kontainer Utama Aplikasi -->
     <div class="bg-white p-8 rounded-2xl shadow-xl w-full max-w-2xl transform transition-all duration-300 hover:scale-105">
         <h1 class="text-3xl font-bold text-center text-gray-800 mb-6">Aplikasi Absensi Wajah</h1>
 
         <!-- Area Pratinjau Kamera -->
-        <div class="relative w-full aspect-video bg-gray-900 rounded-xl overflow-hidden shadow-lg mb-4 flex items-center justify-center">
+        <div id="video-container" class="relative w-full aspect-video bg-gray-900 rounded-xl overflow-hidden shadow-lg mb-4 flex items-center justify-center hidden">
             <video id="video" autoplay muted class="w-full h-full object-cover"></video>
             <canvas id="canvas" class="absolute inset-0 w-full h-full"></canvas>
             <div id="loading-indicator" class="absolute text-white font-bold text-xl flex flex-col items-center">
@@ -61,12 +35,20 @@
             </div>
         </div>
 
-        <!-- Input dan Tombol Absen -->
+        <!-- Input dan Tombol untuk Pendaftaran dan Absensi -->
         <div id="controls" class="flex flex-col space-y-4">
             <input type="text" id="employee-name" placeholder="Masukkan Nama Karyawan" class="w-full p-3 border-2 border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 transition-shadow">
-            <button id="absen-btn" class="w-full bg-blue-600 text-white font-bold py-3 px-6 rounded-xl shadow-lg hover:bg-blue-700 transition-all duration-300 transform hover:-translate-y-1 active:scale-95 disabled:bg-gray-400 disabled:cursor-not-allowed">
-                Absen Masuk
+            <button id="register-btn" class="w-full bg-green-600 text-white font-bold py-3 px-6 rounded-xl shadow-lg hover:bg-green-700 transition-all duration-300 transform hover:-translate-y-1 active:scale-95 disabled:bg-gray-400 disabled:cursor-not-allowed">
+                1. Daftar Wajah
             </button>
+            <div class="grid grid-cols-2 gap-4">
+                 <button id="check-in-btn" class="w-full bg-blue-600 text-white font-bold py-3 px-6 rounded-xl shadow-lg hover:bg-blue-700 transition-all duration-300 transform hover:-translate-y-1 active:scale-95 disabled:bg-gray-400 disabled:cursor-not-allowed">
+                     Absen Masuk
+                 </button>
+                 <button id="check-out-btn" class="w-full bg-orange-600 text-white font-bold py-3 px-6 rounded-xl shadow-lg hover:bg-orange-700 transition-all duration-300 transform hover:-translate-y-1 active:scale-95 disabled:bg-gray-400 disabled:cursor-not-allowed">
+                     Absen Pulang
+                 </button>
+            </div>
         </div>
 
         <!-- Tabel Riwayat Absensi -->
@@ -78,13 +60,11 @@
                         <tr class="bg-gray-200 text-gray-700 uppercase text-sm leading-normal">
                             <th class="py-3 px-6 text-center">Nama</th>
                             <th class="py-3 px-6 text-center">Waktu Masuk</th>
+                            <th class="py-3 px-6 text-center">Waktu Pulang</th>
                         </tr>
                     </thead>
                     <tbody id="attendance-list" class="text-gray-600 text-sm font-light">
                         <!-- Data akan dimasukkan di sini oleh JavaScript -->
-                        <tr>
-                            <td colspan="2" class="py-4 text-center">Belum ada data absensi</td>
-                        </tr>
                     </tbody>
                 </table>
             </div>
@@ -93,21 +73,15 @@
     
     <!-- Script JavaScript untuk logika aplikasi dan Firebase -->
     <script type="module">
-        // Konfigurasi Firebase - GANTI DENGAN KONFIGURASI ANDA SENDIRI
-        const firebaseConfig = {
-            apiKey: "your-api-key",
-            authDomain: "your-project.firebaseapp.com",
-            projectId: "your-project-id",
-            storageBucket: "your-project.appspot.com",
-            messagingSenderId: "123456789",
-            appId: "your-app-id"
-        };
-        
-        // Import Firebase SDK
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.6.0/firebase-app.js";
-        import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/10.6.0/firebase-auth.js";
-        import { getFirestore, collection, addDoc, onSnapshot, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.6.0/firebase-firestore.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/10.6.0/firebase-auth.js";
+        import { getFirestore, collection, addDoc, onSnapshot, serverTimestamp, doc, setDoc, query, where, updateDoc, getDocs } from "https://www.gstatic.com/firebasejs/10.6.0/firebase-firestore.js";
 
+        // Menggunakan variabel global yang disediakan untuk keamanan
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+        const firebaseConfig = JSON.parse(typeof __firebase_config !== 'undefined' ? __firebase_config : '{}');
+        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+        
         // Inisialisasi Firebase
         const app = initializeApp(firebaseConfig);
         const db = getFirestore(app);
@@ -116,110 +90,144 @@
         // Referensi elemen HTML
         const video = document.getElementById('video');
         const canvas = document.getElementById('canvas');
-        const absenBtn = document.getElementById('absen-btn');
+        const videoContainer = document.getElementById('video-container');
+        const checkInBtn = document.getElementById('check-in-btn');
+        const checkOutBtn = document.getElementById('check-out-btn');
+        const registerBtn = document.getElementById('register-btn');
         const employeeNameInput = document.getElementById('employee-name');
         const loadingIndicator = document.getElementById('loading-indicator');
         const statusMessage = document.getElementById('status-message');
         const attendanceList = document.getElementById('attendance-list');
-        const messageModal = document.getElementById('message-modal');
-        const modalMessage = document.getElementById('modal-message');
-        const modalClose = document.getElementById('modal-close');
 
         let isFaceDetected = false;
         let detectionInterval;
-        let modelsLoaded = false;
+        let faceMatcher = null;
+        let stream = null; // Menyimpan stream kamera
+        const FACE_THRESHOLD = 0.6; // Batas toleransi untuk pengenalan wajah
 
-        // Fungsi untuk menampilkan pesan
-        function showMessage(message, type = 'info') {
-            modalMessage.textContent = message;
-            messageModal.style.display = 'flex';
-            
-            // Atur warna berdasarkan jenis pesan
-            if (type === 'error') {
-                modalMessage.classList.add('text-red-600');
-            } else if (type === 'success') {
-                modalMessage.classList.add('text-green-600');
-            }
-        }
-
-        modalClose.addEventListener('click', () => {
-            messageModal.style.display = 'none';
-            modalMessage.classList.remove('text-red-600', 'text-green-600');
+        // Muat model pengenalan wajah dari folder 'models'
+        Promise.all([
+            faceapi.nets.tinyFaceDetector.loadFromUri('./models'),
+            faceapi.nets.faceLandmark68Net.loadFromUri('./models'),
+            faceapi.nets.faceRecognitionNet.loadFromUri('./models')
+        ]).then(() => {
+            loadingIndicator.style.display = 'none';
+            statusMessage.textContent = 'Model siap. Silakan klik tombol absen.';
+        }).catch(err => {
+            console.error("Kesalahan saat memuat model: ", err);
+            statusMessage.textContent = 'Gagal memuat model pengenalan wajah.';
+            loadingIndicator.style.display = 'none';
         });
-
-        // Muat model pengenalan wajah
-        async function loadModels() {
-            try {
-                // Gunakan model dari CDN (tidak perlu path lokal)
-                await Promise.all([
-                    faceapi.nets.tinyFaceDetector.loadFromUri('https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/models'),
-                    faceapi.nets.faceLandmark68Net.loadFromUri('https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/models'),
-                    faceapi.nets.faceRecognitionNet.loadFromUri('https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/models')
-                ]);
-                modelsLoaded = true;
-                console.log("Model berhasil dimuat");
-                startVideo();
-            } catch (err) {
-                console.error("Kesalahan saat memuat model: ", err);
-                statusMessage.textContent = 'Gagal memuat model pengenalan wajah.';
-                loadingIndicator.style.display = 'none';
-                showMessage('Gagal memuat model pengenalan wajah. Pastikan koneksi internet stabil.', 'error');
-            }
-        }
 
         // Memulai streaming video dari kamera
         function startVideo() {
+            videoContainer.classList.remove('hidden');
             navigator.mediaDevices.getUserMedia({ video: {} })
-                .then(stream => {
+                .then(s => {
+                    stream = s;
                     video.srcObject = stream;
-                    video.addEventListener('play', () => {
-                        loadingIndicator.style.display = 'none';
-                        detectFaces();
-                    });
+                    video.addEventListener('play', detectFaces);
                 })
                 .catch(err => {
                     console.error("Kesalahan saat mengakses kamera: ", err);
                     statusMessage.textContent = 'Gagal mengakses kamera. Mohon berikan izin.';
-                    loadingIndicator.style.display = 'none';
-                    showMessage('Tidak dapat mengakses kamera. Pastikan Anda memberikan izin penggunaan kamera.', 'error');
                 });
         }
+        
+        // Menghentikan streaming video
+        function stopVideo() {
+            if (stream) {
+                stream.getTracks().forEach(track => track.stop());
+                video.srcObject = null;
+            }
+            clearInterval(detectionInterval);
+            videoContainer.classList.add('hidden');
+            statusMessage.textContent = 'Menunggu deteksi wajah...';
+            isFaceDetected = false;
+        }
 
-        // Fungsi untuk deteksi wajah
-        function detectFaces() {
-            detectionInterval = setInterval(async () => {
-                if (!modelsLoaded) return;
+        // Fungsi untuk pendaftaran wajah
+        registerBtn.addEventListener('click', async () => {
+            const employeeName = employeeNameInput.value.trim();
+            if (!employeeName) {
+                alert('Nama karyawan harus diisi untuk pendaftaran.');
+                return;
+            }
+            
+            startVideo(); // Mulai kamera untuk pendaftaran
+            statusMessage.textContent = 'Memindai wajah...';
+            setTimeout(async () => {
+                const detectionWithDescriptor = await faceapi.detectSingleFace(video, new faceapi.TinyFaceDetectorOptions()).withFaceLandmarks().withFaceDescriptor();
+
+                if (!detectionWithDescriptor) {
+                    alert('Tidak ada wajah yang terdeteksi. Silakan posisikan wajah Anda di depan kamera.');
+                    stopVideo();
+                    return;
+                }
                 
                 try {
-                    const detections = await faceapi.detectSingleFace(video, new faceapi.TinyFaceDetectorOptions());
+                    const userId = getUserId();
+                    const faceId = employeeName.replace(/\s+/g, '-').toLowerCase(); // Buat ID unik dari nama
+                    const faceProfileRef = doc(collection(db, getFaceProfileCollectionPath()), faceId);
                     
-                    if (detections) {
-                        if (!isFaceDetected) {
-                            isFaceDetected = true;
-                            statusMessage.textContent = 'Wajah terdeteksi! Siap untuk absen.';
-                            absenBtn.disabled = false;
-                        }
-                    } else {
-                        if (isFaceDetected) {
-                            isFaceDetected = false;
-                            statusMessage.textContent = 'Menunggu deteksi wajah...';
-                            absenBtn.disabled = true;
-                        }
-                    }
-                } catch (error) {
-                    console.error("Error detecting faces:", error);
+                    await setDoc(faceProfileRef, {
+                        name: employeeName,
+                        descriptor: JSON.stringify(Array.from(detectionWithDescriptor.descriptor)), // Simpan descriptor sebagai string JSON
+                        timestamp: serverTimestamp()
+                    });
+                    alert(`Wajah ${employeeName} berhasil didaftarkan!`);
+                    employeeNameInput.value = '';
+                } catch (e) {
+                    console.error("Error registering face: ", e);
+                    alert('Gagal mendaftarkan wajah.');
                 }
-            }, 1000); // Deteksi setiap 1 detik (bukan 100ms) untuk mengurangi beban CPU
+                stopVideo();
+            }, 3000); // Beri waktu 3 detik untuk memindai wajah
+        });
+
+        // Fungsi utama untuk deteksi dan pengenalan wajah
+        function detectFaces() {
+            detectionInterval = setInterval(async () => {
+                if (!faceMatcher) {
+                    return; // Tunggu faceMatcher dimuat
+                }
+
+                const detectionsWithDescriptors = await faceapi.detectSingleFace(video, new faceapi.TinyFaceDetectorOptions()).withFaceLandmarks().withFaceDescriptor();
+                
+                if (detectionsWithDescriptors) {
+                    const bestMatch = faceMatcher.findBestMatch(detectionsWithDescriptors.descriptor);
+                    const recognizedName = bestMatch.label;
+                    const distance = bestMatch.distance;
+
+                    if (recognizedName !== 'unknown' && distance < FACE_THRESHOLD) {
+                        statusMessage.textContent = `Wajah dikenali: ${recognizedName}`;
+                        employeeNameInput.value = recognizedName;
+                        isFaceDetected = true;
+                    } else {
+                        statusMessage.textContent = 'Wajah tidak dikenal. Silakan daftar terlebih dahulu.';
+                        employeeNameInput.value = '';
+                        isFaceDetected = false;
+                    }
+                } else {
+                    statusMessage.textContent = 'Menunggu deteksi wajah...';
+                    employeeNameInput.value = '';
+                    isFaceDetected = false;
+                }
+            }, 100);
         }
 
         // Autentikasi anonim ke Firebase
         async function authenticate() {
             try {
-                await signInAnonymously(auth);
-                console.log("Berhasil autentikasi secara anonim.");
+                if (initialAuthToken) {
+                    await signInWithCustomToken(auth, initialAuthToken);
+                    console.log("Berhasil autentikasi dengan token kustom.");
+                } else {
+                    await signInAnonymously(auth);
+                    console.log("Berhasil autentikasi secara anonim.");
+                }
             } catch (error) {
                 console.error("Kesalahan saat autentikasi:", error);
-                showMessage('Gagal terhubung ke server. Silakan refresh halaman.', 'error');
             }
         }
         
@@ -228,95 +236,135 @@
         }
 
         function getCollectionPath() {
-            return `absensi-wajah`; // Menggunakan collection langsung tanpa path yang kompleks
+             return `/artifacts/${firebaseConfig.projectId}/users/${getUserId()}/absensi-wajah`;
+        }
+        
+        function getFaceProfileCollectionPath() {
+            return `/artifacts/${firebaseConfig.projectId}/users/${getUserId()}/face-profiles`;
         }
 
-        // Event listener untuk tombol absen
-        absenBtn.addEventListener('click', async () => {
+        // Event listener untuk tombol absen masuk
+        checkInBtn.addEventListener('click', async () => {
             const employeeName = employeeNameInput.value.trim();
             if (!employeeName) {
-                showMessage('Nama karyawan harus diisi.', 'error');
+                alert('Nama karyawan harus diisi.');
                 return;
             }
-
             if (!isFaceDetected) {
-                showMessage('Tidak ada wajah yang terdeteksi. Pastikan wajah Anda terlihat jelas di kamera.', 'error');
+                alert('Tidak ada wajah yang terdeteksi.');
                 return;
             }
-
-            // Dapatkan gambar wajah dari video
-            const faceCanvas = document.createElement('canvas');
-            faceCanvas.width = video.videoWidth;
-            faceCanvas.height = video.videoHeight;
-            const context = faceCanvas.getContext('2d');
-            context.drawImage(video, 0, 0, video.videoWidth, video.videoHeight);
-
-            const imageDataUrl = faceCanvas.toDataURL('image/jpeg', 0.7); // Kompres gambar
 
             try {
+                const userId = getUserId();
                 await addDoc(collection(db, getCollectionPath()), {
                     name: employeeName,
                     checkInTime: serverTimestamp(),
-                    faceImage: imageDataUrl,
-                    userId: getUserId()
+                    checkOutTime: null
                 });
-                showMessage('Absensi berhasil!', 'success');
+                alert('Absensi masuk berhasil!');
                 employeeNameInput.value = '';
+                stopVideo();
             } catch (e) {
                 console.error("Error adding document: ", e);
-                showMessage('Gagal menyimpan absensi. Pastikan koneksi internet stabil.', 'error');
+                alert('Gagal menyimpan absensi.');
             }
         });
+        
+        // Event listener untuk tombol absen pulang
+        checkOutBtn.addEventListener('click', async () => {
+            const employeeName = employeeNameInput.value.trim();
+            if (!employeeName) {
+                alert('Nama karyawan harus diisi.');
+                return;
+            }
+            if (!isFaceDetected) {
+                alert('Tidak ada wajah yang terdeteksi.');
+                return;
+            }
+
+            try {
+                const userId = getUserId();
+                const q = query(collection(db, getCollectionPath()), where('name', '==', employeeName));
+                const querySnapshot = await getDocs(q);
+                
+                if (querySnapshot.empty) {
+                    alert('Tidak ada data absensi masuk yang ditemukan untuk karyawan ini.');
+                    return;
+                }
+                
+                let latestDoc = null;
+                querySnapshot.forEach(doc => {
+                    const data = doc.data();
+                    if (!data.checkOutTime) { // Cari dokumen yang belum absen pulang
+                        if (!latestDoc || (data.checkInTime.toDate() > latestDoc.data().checkInTime.toDate())) {
+                            latestDoc = doc;
+                        }
+                    }
+                });
+
+                if (latestDoc) {
+                    await updateDoc(doc(db, getCollectionPath(), latestDoc.id), {
+                        checkOutTime: serverTimestamp()
+                    });
+                    alert('Absensi pulang berhasil!');
+                    employeeNameInput.value = '';
+                    stopVideo();
+                } else {
+                    alert('Karyawan ini sudah absen pulang atau belum absen masuk.');
+                }
+
+            } catch (e) {
+                console.error("Error updating document: ", e);
+                alert('Gagal menyimpan absensi pulang.');
+            }
+        });
+
 
         // Mendengarkan perubahan data absensi dari Firestore
         auth.onAuthStateChanged(user => {
             if (user) {
+                // Mendengarkan data riwayat absensi
                 onSnapshot(collection(db, getCollectionPath()), (snapshot) => {
-                    if (snapshot.empty) {
-                        attendanceList.innerHTML = `
-                            <tr>
-                                <td colspan="2" class="py-4 text-center">Belum ada data absensi</td>
-                            </tr>
-                        `;
-                        return;
-                    }
-                    
                     attendanceList.innerHTML = '';
                     snapshot.forEach((doc) => {
                         const data = doc.data();
                         const row = document.createElement('tr');
                         row.className = 'border-b border-gray-200 hover:bg-gray-100 transition-colors';
                         
-                        let formattedTime = 'N/A';
-                        if (data.checkInTime) {
-                            try {
-                                formattedTime = new Date(data.checkInTime.seconds * 1000).toLocaleString('id-ID', { 
-                                    dateStyle: 'short', 
-                                    timeStyle: 'short' 
-                                });
-                            } catch (e) {
-                                console.error("Error formatting date:", e);
-                                formattedTime = 'Format waktu tidak valid';
-                            }
-                        }
+                        const formattedCheckInTime = data.checkInTime ? new Date(data.checkInTime.seconds * 1000).toLocaleString('id-ID', { dateStyle: 'short', timeStyle: 'short' }) : 'N/A';
+                        const formattedCheckOutTime = data.checkOutTime ? new Date(data.checkOutTime.seconds * 1000).toLocaleString('id-ID', { dateStyle: 'short', timeStyle: 'short' }) : 'Belum absen pulang';
                         
                         row.innerHTML = `
-                            <td class="py-3 px-6 text-center">${data.name || 'Tidak diketahui'}</td>
-                            <td class="py-3 px-6 text-center">${formattedTime}</td>
+                            <td class="py-3 px-6 text-center">${data.name}</td>
+                            <td class="py-3 px-6 text-center">${formattedCheckInTime}</td>
+                            <td class="py-3 px-6 text-center">${formattedCheckOutTime}</td>
                         `;
                         attendanceList.appendChild(row);
                     });
-                }, (error) => {
-                    console.error("Error listening to attendance data:", error);
-                    showMessage('Gagal memuat data absensi.', 'error');
+                });
+
+                // Mendengarkan data profil wajah untuk pengenalan
+                onSnapshot(collection(db, getFaceProfileCollectionPath()), (snapshot) => {
+                    const labeledDescriptors = snapshot.docs.map(doc => {
+                        const data = doc.data();
+                        const descriptor = JSON.parse(data.descriptor);
+                        return new faceapi.LabeledFaceDescriptors(data.name, [new Float32Array(descriptor)]);
+                    });
+                    
+                    // FIX: Perbaiki FaceMatcher untuk menghindari error
+                    if (labeledDescriptors.length > 0) {
+                        faceMatcher = new faceapi.FaceMatcher(labeledDescriptors);
+                    } else {
+                        faceMatcher = null;
+                        console.log("Tidak ada profil wajah yang terdaftar.");
+                    }
                 });
             }
         });
         
-        // Jalankan aplikasi
-        loadModels();
+        // Jalankan autentikasi saat aplikasi dimuat
         authenticate();
-
     </script>
 </body>
 </html>
