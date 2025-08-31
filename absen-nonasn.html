@@ -97,7 +97,7 @@
             faceapi.nets.faceRecognitionNet.loadFromUri('./models')
         ]).then(startVideo).catch(err => {
             console.error("Kesalahan saat memuat model: ", err);
-            statusMessage.textContent = 'Gagal memuat model pengenalan wajah.';
+            statusMessage.textContent = 'Gagal memuat model pengenalan wajah. Pastikan folder "models" ada.';
             loadingIndicator.style.display = 'none';
         });
 
@@ -113,7 +113,8 @@
                 })
                 .catch(err => {
                     console.error("Kesalahan saat mengakses kamera: ", err);
-                    statusMessage.textContent = 'Gagal mengakses kamera.';
+                    statusMessage.textContent = 'Gagal mengakses kamera. Mohon berikan izin.';
+                    loadingIndicator.style.display = 'none';
                 });
         }
 
