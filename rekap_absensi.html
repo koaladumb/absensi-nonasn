@@ -45,14 +45,13 @@
             border-color: #8b949e;
         }
         .btn-danger {
-            background-color: transparent;
-            color: #f85149;
-            border: 1px solid #30363d;
+            background-color: #da3633;
+            color: white;
+            border: 1px solid #f85149;
             transition: all 0.2s;
         }
         .btn-danger:hover {
             background-color: #f85149;
-            color: white;
             border-color: #f85149;
         }
         .timestamp-preview {
@@ -60,6 +59,9 @@
             color: #8b949e;
             height: 1.2rem;
             margin-top: 4px;
+        }
+        .modal {
+            transition: opacity 0.25s ease;
         }
     </style>
 </head>
@@ -151,6 +153,18 @@
             </div>
         </main>
     </div>
+    
+    <!-- Modal container -->
+    <div id="modal" class="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center p-4 z-50 hidden modal">
+        <div class="card rounded-lg p-6 w-full max-w-sm">
+            <h3 id="modalTitle" class="text-lg font-bold mb-4 text-white"></h3>
+            <p id="modalMessage" class="mb-6"></p>
+            <div id="modalActions" class="flex justify-end gap-4">
+                <!-- Buttons will be injected here -->
+            </div>
+        </div>
+    </div>
+
 
     <script>
         document.addEventListener('DOMContentLoaded', () => {
@@ -169,6 +183,12 @@
             const weeklyHoursEl = document.getElementById('weeklyHours');
             const monthlyHoursEl = document.getElementById('monthlyHours');
             const historyTableBody = document.getElementById('historyTableBody');
+
+            // Modal elements
+            const modal = document.getElementById('modal');
+            const modalTitle = document.getElementById('modalTitle');
+            const modalMessage = document.getElementById('modalMessage');
+            const modalActions = document.getElementById('modalActions');
 
             // Kunci Local Storage
             const RECORDS_KEY = 'attendanceRecords_ts';
@@ -189,7 +209,6 @@
             function handleTimestampInput(event, displayElement) {
                 const timestamp = event.target.value;
                 if (timestamp && timestamp.length >= 10) {
-                    // Unix timestamp in seconds, JS Date needs milliseconds
                     const date = new Date(parseInt(timestamp) * 1000);
                     if (!isNaN(date)) {
                          displayElement.textContent = date.toLocaleString('id-ID', {
@@ -204,33 +223,62 @@
                 }
             }
 
-            // Fungsi untuk menyimpan record kehadiran
+            // Fungsi untuk menyimpan atau memperbarui record kehadiran
             function handleSaveRecord() {
                 const name = nameInput.value.trim();
-                const clockInTimestamp = clockInTimestampInput.value;
-                const clockOutTimestamp = clockOutTimestampInput.value;
+                const clockInValue = clockInTimestampInput.value;
+                const clockOutValue = clockOutTimestampInput.value;
 
-                if (!name || !clockInTimestamp || !clockOutTimestamp) {
-                    alert('Harap isi semua kolom: Nama, Timestamp Masuk, dan Timestamp Pulang.');
+                if (!name || (!clockInValue && !clockOutValue)) {
+                    showAlert('Input Tidak Lengkap', 'Harap isi nama karyawan dan minimal satu timestamp (masuk atau pulang).');
                     return;
                 }
+
+                const clockInTimestamp = clockInValue ? parseInt(clockInValue) : null;
+                const clockOutTimestamp = clockOutValue ? parseInt(clockOutValue) : null;
+
+                if (clockInTimestamp && clockOutTimestamp && clockOutTimestamp <= clockInTimestamp) {
+                    showAlert('Input Tidak Valid', 'Timestamp Pulang harus lebih besar dari Timestamp Masuk.');
+                    return;
+                }
+
+                const referenceTimestamp = clockInTimestamp || clockOutTimestamp;
+                const recordDate = new Date(referenceTimestamp * 1000);
                 
-                if (parseInt(clockOutTimestamp) <= parseInt(clockInTimestamp)) {
-                    alert('Timestamp Pulang harus lebih besar dari Timestamp Masuk.');
-                    return;
-                }
+                const startOfDay = new Date(recordDate);
+                startOfDay.setHours(0, 0, 0, 0);
+                const startOfDayTs = startOfDay.getTime() / 1000;
+
+                const endOfDay = new Date(recordDate);
+                endOfDay.setHours(23, 59, 59, 999);
+                const endOfDayTs = endOfDay.getTime() / 1000;
 
                 let records = getRecords();
-                const newRecord = {
-                    id: Date.now(), // Unique ID for each record
-                    name,
-                    clockInTimestamp: parseInt(clockInTimestamp),
-                    clockOutTimestamp: parseInt(clockOutTimestamp)
-                };
-                records.push(newRecord);
+                
+                const recordIndex = records.findIndex(r => {
+                    const existingRecordTs = r.clockInTimestamp || r.clockOutTimestamp;
+                    return r.name.toLowerCase() === name.toLowerCase() && 
+                           existingRecordTs >= startOfDayTs && 
+                           existingRecordTs < endOfDayTs;
+                });
+
+                if (recordIndex > -1) {
+                    // Update record yang ada
+                    if (clockInTimestamp) records[recordIndex].clockInTimestamp = clockInTimestamp;
+                    if (clockOutTimestamp) records[recordIndex].clockOutTimestamp = clockOutTimestamp;
+                } else {
+                    // Buat record baru
+                    const newRecord = {
+                        id: Date.now(),
+                        name,
+                        clockInTimestamp: clockInTimestamp,
+                        clockOutTimestamp: clockOutTimestamp
+                    };
+                    records.push(newRecord);
+                }
+                
                 localStorage.setItem(RECORDS_KEY, JSON.stringify(records));
                 
-                // Kosongkan input setelah menyimpan
                 nameInput.value = '';
                 clockInTimestampInput.value = '';
                 clockOutTimestampInput.value = '';
@@ -240,25 +288,23 @@
                 calculateAndRenderAll();
             }
             
-            // Fungsi untuk menyimpan pengaturan jam kerja
             function handleSaveSettings() {
                 const settings = {
                     standardIn: standardInInput.value,
                     standardOut: standardOutInput.value
                 };
                 localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
-                alert('Pengaturan berhasil disimpan!');
+                showAlert('Berhasil', 'Pengaturan jam kerja berhasil disimpan!');
                 calculateAndRenderAll();
             }
             
-            // Fungsi untuk aksi pada tabel riwayat (hapus)
             function handleHistoryActions(e) {
                 if (e.target.classList.contains('delete-btn')) {
                     const recordId = e.target.dataset.id;
-                    if (confirm(`Apakah Anda yakin ingin menghapus data ini?`)) {
+                    showConfirm('Konfirmasi Hapus', 'Apakah Anda yakin ingin menghapus data ini?', () => {
                         deleteRecord(recordId);
                         calculateAndRenderAll();
-                    }
+                    });
                 }
             }
             
@@ -268,19 +314,16 @@
                 localStorage.setItem(RECORDS_KEY, JSON.stringify(records));
             }
 
-            // Fungsi utama untuk kalkulasi dan rendering UI
             function calculateAndRenderAll() {
                 renderHistoryTable();
                 renderAggregateSummaries();
             }
             
-            // Render tabel riwayat
             function renderHistoryTable() {
                 const records = getRecords();
                 const settings = getSettings();
                 
-                // Urutkan dari yang terbaru
-                records.sort((a, b) => b.clockInTimestamp - a.clockInTimestamp);
+                records.sort((a, b) => (b.clockInTimestamp || b.clockOutTimestamp) - (a.clockInTimestamp || a.clockOutTimestamp));
 
                 historyTableBody.innerHTML = '';
                 if (records.length === 0) {
@@ -292,49 +335,54 @@
                 const [stdOutHour, stdOutMin] = settings.standardOut.split(':').map(Number);
                 
                 records.forEach(r => {
-                    const clockInDate = new Date(r.clockInTimestamp * 1000);
-                    const clockOutDate = new Date(r.clockOutTimestamp * 1000);
+                    const clockInDate = r.clockInTimestamp ? new Date(r.clockInTimestamp * 1000) : null;
+                    const clockOutDate = r.clockOutTimestamp ? new Date(r.clockOutTimestamp * 1000) : null;
 
-                    // Buat waktu standar pada HARI YANG SAMA dengan record
-                    const standardInTime = new Date(clockInDate);
-                    standardInTime.setHours(stdInHour, stdInMin, 0, 0);
+                    const displayDateObj = clockInDate || clockOutDate;
+                    if (!displayDateObj) return; 
 
-                    const standardOutTime = new Date(clockInDate); // Asumsi pulang di hari yang sama
-                    standardOutTime.setHours(stdOutHour, stdOutMin, 0, 0);
+                    let latenessMs = null, earlyLeaveMs = null, workDurationMs = null;
 
-                    const workDurationMs = clockOutDate - clockInDate;
-                    const latenessMs = Math.max(0, clockInDate - standardInTime);
-                    const earlyLeaveMs = Math.max(0, standardOutTime - clockOutDate);
+                    if (clockInDate) {
+                        const standardInTime = new Date(displayDateObj);
+                        standardInTime.setHours(stdInHour, stdInMin, 0, 0);
+                        latenessMs = Math.max(0, clockInDate - standardInTime);
+                    }
+
+                    if (clockOutDate) {
+                        const standardOutTime = new Date(displayDateObj);
+                        standardOutTime.setHours(stdOutHour, stdOutMin, 0, 0);
+                        earlyLeaveMs = Math.max(0, standardOutTime - clockOutDate);
+                    }
+
+                    if (clockInDate && clockOutDate) {
+                        workDurationMs = clockOutDate - clockInDate;
+                    }
                     
                     const row = document.createElement('tr');
                     row.className = 'border-b border-gray-700 hover:bg-gray-800';
                     row.innerHTML = `
                         <td class="p-2 font-semibold">${r.name}</td>
-                        <td class="p-2">${clockInDate.toLocaleDateString('id-ID', {day: '2-digit', month: 'short', year: 'numeric'})}</td>
-                        <td class="p-2">${clockInDate.toLocaleTimeString('id-ID', {hour: '2-digit', minute: '2-digit'})}</td>
-                        <td class="p-2">${clockOutDate.toLocaleTimeString('id-ID', {hour: '2-digit', minute: '2-digit'})}</td>
-                        <td class="p-2 text-yellow-400">${formatDuration(latenessMs)}</td>
-                        <td class="p-2 text-blue-400">${formatDuration(earlyLeaveMs)}</td>
-                        <td class="p-2 font-bold">${formatDuration(workDurationMs, true)}</td>
+                        <td class="p-2">${displayDateObj.toLocaleDateString('id-ID', {day: '2-digit', month: 'short', year: 'numeric'})}</td>
+                        <td class="p-2">${clockInDate ? clockInDate.toLocaleTimeString('id-ID', {hour: '2-digit', minute: '2-digit'}) : '-'}</td>
+                        <td class="p-2">${clockOutDate ? clockOutDate.toLocaleTimeString('id-ID', {hour: '2-digit', minute: '2-digit'}) : '-'}</td>
+                        <td class="p-2 text-yellow-400">${latenessMs !== null ? formatDuration(latenessMs) : '-'}</td>
+                        <td class="p-2 text-blue-400">${earlyLeaveMs !== null ? formatDuration(earlyLeaveMs) : '-'}</td>
+                        <td class="p-2 font-bold">${workDurationMs !== null ? formatDuration(workDurationMs, true) : '-'}</td>
                         <td class="p-2 text-right">
-                            <button data-id="${r.id}" class="delete-btn text-xs py-1 px-2 rounded-md btn-danger">Hapus</button>
+                            <button data-id="${r.id}" class="delete-btn text-xs py-1 px-2 rounded-md btn-secondary">Hapus</button>
                         </td>
                     `;
                     historyTableBody.appendChild(row);
                 });
             }
 
-            // Render ringkasan akumulasi (mingguan & bulanan)
             function renderAggregateSummaries() {
                 const records = getRecords();
-                
                 const today = new Date();
-                today.setHours(0, 0, 0, 0); // Start of today
-
-                // Get Sunday of the current week as the start of the week
+                today.setHours(0, 0, 0, 0);
                 const startOfWeek = new Date(today);
                 startOfWeek.setDate(today.getDate() - today.getDay());
-
                 const currentMonth = today.getMonth();
                 const currentYear = today.getFullYear();
                 
@@ -342,17 +390,11 @@
                 let monthlyMs = 0;
                 
                 records.forEach(r => {
-                    const recordDate = new Date(r.clockInTimestamp * 1000);
-                    const duration = (r.clockOutTimestamp - r.clockInTimestamp) * 1000;
-                    
-                    // Cek mingguan
-                    if (recordDate >= startOfWeek) {
-                        weeklyMs += duration;
-                    }
-                    
-                    // Cek bulanan
-                    if (recordDate.getMonth() === currentMonth && recordDate.getFullYear() === currentYear) {
-                        monthlyMs += duration;
+                    if (r.clockInTimestamp && r.clockOutTimestamp) {
+                        const recordDate = new Date(r.clockInTimestamp * 1000);
+                        const duration = (r.clockOutTimestamp - r.clockInTimestamp) * 1000;
+                        if (recordDate >= startOfWeek) weeklyMs += duration;
+                        if (recordDate.getMonth() === currentMonth && recordDate.getFullYear() === currentYear) monthlyMs += duration;
                     }
                 });
                 
@@ -360,7 +402,46 @@
                 monthlyHoursEl.textContent = formatDuration(monthlyMs, true);
             }
 
-            // Fungsi Helper
+            // --- Modal Functions ---
+            function showAlert(title, message) {
+                modalTitle.textContent = title;
+                modalMessage.textContent = message;
+                modalActions.innerHTML = `<button id="modalOkBtn" class="btn-primary py-2 px-4 rounded-md">OK</button>`;
+                modal.classList.remove('hidden');
+                document.getElementById('modalOkBtn').focus();
+                
+                document.getElementById('modalOkBtn').onclick = () => {
+                    modal.classList.add('hidden');
+                };
+            }
+
+            function showConfirm(title, message, onConfirm) {
+                modalTitle.textContent = title;
+                modalMessage.textContent = message;
+                modalActions.innerHTML = `
+                    <button id="modalCancelBtn" class="btn-secondary py-2 px-4 rounded-md">Batal</button>
+                    <button id="modalConfirmBtn" class="btn-danger py-2 px-4 rounded-md">Ya, Hapus</button>
+                `;
+                modal.classList.remove('hidden');
+                document.getElementById('modalConfirmBtn').focus();
+
+                const confirmBtn = document.getElementById('modalConfirmBtn');
+                const cancelBtn = document.getElementById('modalCancelBtn');
+
+                const cleanup = () => {
+                    modal.classList.add('hidden');
+                }
+                
+                confirmBtn.onclick = () => {
+                    cleanup();
+                    onConfirm();
+                };
+                cancelBtn.onclick = () => {
+                    cleanup();
+                };
+            }
+
+            // --- Helper Functions ---
             function getRecords() {
                 return JSON.parse(localStorage.getItem(RECORDS_KEY)) || [];
             }
@@ -394,3 +475,4 @@
     </script>
 </body>
 </html>
+
