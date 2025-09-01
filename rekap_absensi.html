@@ -6,6 +6,8 @@
     <title>Rekapitulasi Kehadiran Karyawan (Timestamp)</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <!-- SheetJS library untuk ekspor Excel -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <style>
         body {
             font-family: 'Inter', sans-serif;
@@ -62,6 +64,12 @@
         }
         .modal {
             transition: opacity 0.25s ease;
+        }
+        .file-upload-label {
+            cursor: pointer;
+        }
+        .file-upload-input {
+            display: none;
         }
     </style>
 </head>
@@ -124,12 +132,28 @@
                         </div>
                     </div>
                 </div>
+                
+                <!-- Menu Baru: Kelola Data -->
+                <div class="card p-6 rounded-lg">
+                    <h2 class="text-xl font-semibold mb-4 text-white">Kelola Data</h2>
+                    <div class="space-y-4">
+                        <button id="backupDataBtn" class="w-full btn-secondary font-semibold py-2 px-4 rounded-md">Backup Database (JSON)</button>
+                        <label for="restoreFile" class="w-full btn-secondary font-semibold py-2 px-4 rounded-md text-center file-upload-label">
+                            Restore Database (JSON)
+                        </label>
+                        <input type="file" id="restoreFile" class="file-upload-input" accept=".json">
+                        <button id="deleteAllDataBtn" class="w-full btn-danger font-semibold py-2 px-4 rounded-md">Hapus Semua Data</button>
+                    </div>
+                </div>
             </div>
 
             <!-- Kolom Riwayat -->
             <div class="lg:col-span-3 flex flex-col gap-6">
                 <div class="card p-6 rounded-lg">
-                    <h2 class="text-xl font-semibold mb-4 text-white">Tabel Rekapitulasi Kehadiran</h2>
+                    <div class="flex justify-between items-center mb-4">
+                        <h2 class="text-xl font-semibold text-white">Tabel Rekapitulasi Kehadiran</h2>
+                        <button id="exportXlsxBtn" class="btn-primary font-semibold py-2 px-4 rounded-md">Ekspor ke XLSX</button>
+                    </div>
                     <div class="overflow-x-auto">
                         <table class="w-full text-left text-sm">
                             <thead class="border-b border-gray-600">
@@ -190,6 +214,12 @@
             const modalMessage = document.getElementById('modalMessage');
             const modalActions = document.getElementById('modalActions');
 
+            // Elemen menu Kelola Data
+            const backupDataBtn = document.getElementById('backupDataBtn');
+            const restoreFile = document.getElementById('restoreFile');
+            const deleteAllDataBtn = document.getElementById('deleteAllDataBtn');
+            const exportXlsxBtn = document.getElementById('exportXlsxBtn');
+
             // Kunci Local Storage
             const RECORDS_KEY = 'attendanceRecords_ts';
             const SETTINGS_KEY = 'attendanceSettings_ts';
@@ -204,6 +234,12 @@
             saveButton.addEventListener('click', handleSaveRecord);
             saveSettingsButton.addEventListener('click', handleSaveSettings);
             historyTableBody.addEventListener('click', handleHistoryActions);
+            
+            // Event Listeners untuk menu baru
+            backupDataBtn.addEventListener('click', handleBackupData);
+            restoreFile.addEventListener('change', handleRestoreData);
+            deleteAllDataBtn.addEventListener('click', handleDeleteAllData);
+            exportXlsxBtn.addEventListener('click', handleExportXlsx);
 
             // Fungsi untuk mengkonversi timestamp ke format tanggal & waktu saat user mengetik
             function handleTimestampInput(event, displayElement) {
@@ -441,6 +477,97 @@
                 };
             }
 
+            // --- Fungsi-fungsi baru untuk Kelola Data ---
+            function handleBackupData() {
+                const data = {
+                    records: getRecords(),
+                    settings: getSettings()
+                };
+                const dataStr = JSON.stringify(data, null, 2);
+                const blob = new Blob([dataStr], {type: "application/json"});
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `backup_rekap_kehadiran_${Date.now()}.json`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+            }
+
+            function handleRestoreData(event) {
+                const file = event.target.files[0];
+                if (!file) {
+                    return;
+                }
+
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    try {
+                        const restoredData = JSON.parse(e.target.result);
+                        if (restoredData.records && restoredData.settings) {
+                            showConfirm('Konfirmasi Restore', 'Ini akan menimpa semua data yang ada. Lanjutkan?', () => {
+                                localStorage.setItem(RECORDS_KEY, JSON.stringify(restoredData.records));
+                                localStorage.setItem(SETTINGS_KEY, JSON.stringify(restoredData.settings));
+                                showAlert('Berhasil', 'Data berhasil dipulihkan!');
+                                calculateAndRenderAll();
+                            });
+                        } else {
+                            showAlert('Gagal', 'File JSON tidak valid. Harap unggah file backup yang benar.');
+                        }
+                    } catch (error) {
+                        showAlert('Gagal', 'Terjadi kesalahan saat membaca file. Pastikan file berformat JSON yang benar.');
+                    }
+                };
+                reader.readAsText(file);
+            }
+
+            function handleDeleteAllData() {
+                showConfirm('Konfirmasi Hapus Semua', 'Apakah Anda yakin ingin menghapus SEMUA data kehadiran? Tindakan ini tidak bisa dibatalkan.', () => {
+                    localStorage.removeItem(RECORDS_KEY);
+                    showAlert('Berhasil', 'Semua data telah dihapus.');
+                    calculateAndRenderAll();
+                });
+            }
+
+            // --- Fungsi baru untuk Ekspor XLSX ---
+            function handleExportXlsx() {
+                const records = getRecords();
+                const settings = getSettings();
+                const tableBody = historyTableBody.children;
+
+                if (records.length === 0) {
+                    showAlert('Tidak Ada Data', 'Tidak ada data kehadiran untuk diekspor.');
+                    return;
+                }
+
+                const data = [];
+                // Headers
+                data.push(['Nama Karyawan', 'Tanggal', 'Jam Masuk', 'Jam Pulang', 'Terlambat', 'Pulang Awal', 'Durasi Kerja']);
+
+                // Data rows
+                for (let i = 0; i < tableBody.length; i++) {
+                    const row = tableBody[i];
+                    const cells = row.querySelectorAll('td');
+                    const rowData = [
+                        cells[0].innerText, // Nama
+                        cells[1].innerText, // Tanggal
+                        cells[2].innerText, // Jam Masuk
+                        cells[3].innerText, // Jam Pulang
+                        cells[4].innerText, // Terlambat
+                        cells[5].innerText, // Pulang Awal
+                        cells[6].innerText  // Durasi Kerja
+                    ];
+                    data.push(rowData);
+                }
+
+                const ws = XLSX.utils.aoa_to_sheet(data);
+                const wb = XLSX.utils.book_new();
+                XLSX.utils.book_append_sheet(wb, ws, "Rekap Kehadiran");
+                
+                XLSX.writeFile(wb, `Laporan_Kehadiran_${new Date().getFullYear()}-${new Date().getMonth() + 1}-${new Date().getDate()}.xlsx`);
+            }
+
             // --- Helper Functions ---
             function getRecords() {
                 return JSON.parse(localStorage.getItem(RECORDS_KEY)) || [];
@@ -475,4 +602,3 @@
     </script>
 </body>
 </html>
-
