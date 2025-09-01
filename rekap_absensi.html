@@ -217,8 +217,10 @@
                     userDisplay.textContent = `ID Pengguna Saat Ini: ${userId}`;
                     userDisplay.classList.remove('hidden');
                     
-                    // Ganti lokasi koleksi ke root: 'attendance_records'
-                    const q = query(collection(db, 'attendance_records'));
+                    // Lokasi koleksi data kehadiran yang benar
+                    const collectionPath = 'attendance_records';
+                    const q = query(collection(db, collectionPath));
+                    
                     onSnapshot(q, (snapshot) => {
                         const records = [];
                         snapshot.forEach(doc => {
@@ -234,13 +236,21 @@
                 } else {
                      try {
                         if (initialAuthToken) {
+                            // Coba masuk dengan token yang disediakan
                             await signInWithCustomToken(auth, initialAuthToken);
                         } else {
+                            // Jika token tidak ada, masuk secara anonim
                             await signInAnonymously(auth);
                         }
                     } catch (error) {
-                        console.error("Gagal masuk:", error);
-                        showAlert('Kesalahan Otentikasi', 'Gagal masuk. Silakan periksa koneksi internet Anda atau coba lagi nanti.');
+                        console.error("Gagal masuk dengan custom token, mencoba masuk secara anonim:", error);
+                        // Jika masuk dengan token gagal, jatuh ke otentikasi anonim
+                        try {
+                             await signInAnonymously(auth);
+                        } catch (anonError) {
+                             console.error("Gagal masuk secara anonim:", anonError);
+                             showAlert('Kesalahan Otentikasi', 'Gagal masuk. Silakan periksa koneksi internet Anda atau coba lagi nanti.');
+                        }
                     }
                 }
             });
@@ -297,14 +307,15 @@
             };
 
             try {
+                // Lokasi koleksi data kehadiran yang benar
+                const collectionPath = 'attendance_records';
+
                 if (docId) {
-                    // Ganti lokasi koleksi ke root: 'attendance_records'
-                    const docRef = doc(db, 'attendance_records', docId);
+                    const docRef = doc(db, collectionPath, docId);
                     await updateDoc(docRef, record);
                     showAlert('Berhasil', 'Data berhasil diperbarui!');
                 } else {
-                    // Ganti lokasi koleksi ke root: 'attendance_records'
-                    await addDoc(collection(db, 'attendance_records'), record);
+                    await addDoc(collection(db, collectionPath), record);
                     showAlert('Berhasil', 'Data berhasil disimpan!');
                 }
                 
@@ -333,8 +344,9 @@
         
         async function deleteRecord(docId) {
             try {
-                // Ganti lokasi koleksi ke root: 'attendance_records'
-                await deleteDoc(doc(db, 'attendance_records', docId));
+                // Lokasi koleksi data kehadiran yang benar
+                const collectionPath = 'attendance_records';
+                await deleteDoc(doc(db, collectionPath, docId));
                 showAlert('Berhasil', 'Data berhasil dihapus!');
             } catch (error) {
                 showAlert('Kesalahan Hapus', 'Gagal menghapus data. Detail: ' + error.message);
@@ -344,8 +356,9 @@
 
         async function showEditModal(docId) {
             try {
-                // Ganti lokasi koleksi ke root: 'attendance_records'
-                const docRef = doc(db, 'attendance_records', docId);
+                // Lokasi koleksi data kehadiran yang benar
+                const collectionPath = 'attendance_records';
+                const docRef = doc(db, collectionPath, docId);
                 const docSnap = await getDoc(docRef);
                 if (docSnap.exists()) {
                     const data = docSnap.data();
@@ -379,8 +392,8 @@
                             clockInTimestamp: parseInt(document.getElementById('modalClockIn').value),
                             clockOutTimestamp: parseInt(document.getElementById('modalClockOut').value),
                         };
-                        // Ganti lokasi koleksi ke root: 'attendance_records'
-                        const docRef = doc(db, 'attendance_records', docId);
+                        // Lokasi koleksi data kehadiran yang benar
+                        const docRef = doc(db, collectionPath, docId);
                         await updateDoc(docRef, updatedRecord);
                         modal.classList.add('hidden');
                         showAlert('Berhasil', 'Data berhasil diperbarui!');
