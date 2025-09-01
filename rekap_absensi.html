@@ -187,8 +187,6 @@
             appId: "1:491057180070:web:0ce651224f84225c1eb367",
             measurementId: "G-XX3S6X37FN"
         };
-        // Perbaikan: Gunakan ID aplikasi dari data user
-        const appId = 'absensi-karyawan-dfe06';
         const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
         
         let db;
@@ -219,9 +217,8 @@
                     userDisplay.textContent = `ID Pengguna Saat Ini: ${userId}`;
                     userDisplay.classList.remove('hidden');
                     
-                    // Tambahkan listener real-time untuk semua data kehadiran
-                    // Kode ini akan membaca data yang masuk, baik dari Anda maupun dari pengguna lain
-                    const q = query(collection(db, `/artifacts/${appId}/public/data/attendance_records`));
+                    // Ganti lokasi koleksi ke root: 'attendance_records'
+                    const q = query(collection(db, 'attendance_records'));
                     onSnapshot(q, (snapshot) => {
                         const records = [];
                         snapshot.forEach(doc => {
@@ -301,11 +298,13 @@
 
             try {
                 if (docId) {
-                    const docRef = doc(db, `/artifacts/${appId}/public/data/attendance_records`, docId);
+                    // Ganti lokasi koleksi ke root: 'attendance_records'
+                    const docRef = doc(db, 'attendance_records', docId);
                     await updateDoc(docRef, record);
                     showAlert('Berhasil', 'Data berhasil diperbarui!');
                 } else {
-                    await addDoc(collection(db, `/artifacts/${appId}/public/data/attendance_records`), record);
+                    // Ganti lokasi koleksi ke root: 'attendance_records'
+                    await addDoc(collection(db, 'attendance_records'), record);
                     showAlert('Berhasil', 'Data berhasil disimpan!');
                 }
                 
@@ -334,7 +333,8 @@
         
         async function deleteRecord(docId) {
             try {
-                await deleteDoc(doc(db, `/artifacts/${appId}/public/data/attendance_records`, docId));
+                // Ganti lokasi koleksi ke root: 'attendance_records'
+                await deleteDoc(doc(db, 'attendance_records', docId));
                 showAlert('Berhasil', 'Data berhasil dihapus!');
             } catch (error) {
                 showAlert('Kesalahan Hapus', 'Gagal menghapus data. Detail: ' + error.message);
@@ -344,7 +344,8 @@
 
         async function showEditModal(docId) {
             try {
-                const docRef = doc(db, `/artifacts/${appId}/public/data/attendance_records`, docId);
+                // Ganti lokasi koleksi ke root: 'attendance_records'
+                const docRef = doc(db, 'attendance_records', docId);
                 const docSnap = await getDoc(docRef);
                 if (docSnap.exists()) {
                     const data = docSnap.data();
@@ -378,7 +379,8 @@
                             clockInTimestamp: parseInt(document.getElementById('modalClockIn').value),
                             clockOutTimestamp: parseInt(document.getElementById('modalClockOut').value),
                         };
-                        const docRef = doc(db, `/artifacts/${appId}/public/data/attendance_records`, docId);
+                        // Ganti lokasi koleksi ke root: 'attendance_records'
+                        const docRef = doc(db, 'attendance_records', docId);
                         await updateDoc(docRef, updatedRecord);
                         modal.classList.add('hidden');
                         showAlert('Berhasil', 'Data berhasil diperbarui!');
