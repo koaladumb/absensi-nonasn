@@ -152,7 +152,7 @@
                 <div class="card p-6 rounded-lg">
                     <div class="flex justify-between items-center mb-4">
                         <h2 class="text-xl font-semibold text-white">Tabel Rekapitulasi Kehadiran</h2>
-                        <button id="exportXlsxBtn" class="btn-primary font-semibold py-2 px-4 rounded-md">Ekspor ke XLSX</button>
+                        <button id="exportHistoryXlsxBtn" class="btn-primary font-semibold py-2 px-4 rounded-md">Ekspor XLSX</button>
                     </div>
                     <div class="overflow-x-auto table-container">
                         <table class="w-full text-left text-sm">
@@ -178,7 +178,10 @@
                 
                 <!-- Tabel Akumulasi per Karyawan -->
                 <div class="card p-6 rounded-lg">
-                    <h2 class="text-xl font-semibold mb-4 text-white">Akumulasi Per Karyawan</h2>
+                    <div class="flex justify-between items-center mb-4">
+                        <h2 class="text-xl font-semibold text-white">Akumulasi Per Karyawan</h2>
+                        <button id="exportSummaryXlsxBtn" class="btn-primary font-semibold py-2 px-4 rounded-md">Ekspor XLSX</button>
+                    </div>
                     <div class="overflow-x-auto table-container">
                         <table class="w-full text-left text-sm">
                             <thead class="border-b border-gray-600">
@@ -235,7 +238,8 @@
             const backupDataBtn = document.getElementById('backupDataBtn');
             const restoreFile = document.getElementById('restoreFile');
             const deleteAllDataBtn = document.getElementById('deleteAllDataBtn');
-            const exportXlsxBtn = document.getElementById('exportXlsxBtn');
+            const exportHistoryXlsxBtn = document.getElementById('exportHistoryXlsxBtn');
+            const exportSummaryXlsxBtn = document.getElementById('exportSummaryXlsxBtn');
 
             // Kunci Local Storage
             const RECORDS_KEY = 'attendanceRecords_ts';
@@ -253,7 +257,9 @@
             backupDataBtn.addEventListener('click', handleBackupData);
             restoreFile.addEventListener('change', handleRestoreData);
             deleteAllDataBtn.addEventListener('click', handleDeleteAllData);
-            exportXlsxBtn.addEventListener('click', handleExportXlsx);
+            exportHistoryXlsxBtn.addEventListener('click', handleExportHistoryXlsx);
+            exportSummaryXlsxBtn.addEventListener('click', handleExportSummaryXlsx);
+
 
             // Fungsi untuk mengkonversi timestamp ke format tanggal & waktu saat user mengetik
             function handleTimestampInput(event, displayElement) {
@@ -359,7 +365,7 @@
             function calculateAndRenderAll() {
                 renderHistoryTable();
                 renderAggregateSummaries();
-                renderEmployeeSummary(); // Call the new function
+                renderEmployeeSummary();
             }
             
             function renderHistoryTable() {
@@ -461,7 +467,7 @@
                 monthlyHoursEl.textContent = formatDuration(monthlyMs);
             }
 
-            // NEW: Fungsi untuk merender akumulasi per karyawan
+            // Fungsi untuk merender akumulasi per karyawan
             function renderEmployeeSummary() {
                 const records = getRecords();
                 const summary = {};
@@ -596,8 +602,8 @@
                 });
             }
 
-            // --- New function for XLSX export ---
-            function handleExportXlsx() {
+            // --- New function for XLSX export (History Table) ---
+            function handleExportHistoryXlsx() {
                 const records = getRecords();
                 const tableBody = historyTableBody.children;
 
@@ -633,6 +639,54 @@
                 
                 XLSX.writeFile(wb, `Laporan_Kehadiran_${new Date().getFullYear()}-${new Date().getMonth() + 1}-${new Date().getDate()}.xlsx`);
             }
+            
+            // --- NEW: Function to export Summary Table to XLSX ---
+            function handleExportSummaryXlsx() {
+                const records = getRecords();
+                const summary = {};
+                const today = new Date();
+                const startOfWeek = new Date(today.getFullYear(), today.getMonth(), today.getDate() - today.getDay());
+                
+                records.forEach(r => {
+                    if (!r.clockInTimestamp || !r.clockOutTimestamp) return;
+                    const duration = (r.clockOutTimestamp - r.clockInTimestamp) * 1000;
+                    const recordDate = new Date(r.clockInTimestamp * 1000);
+                    
+                    const name = r.name;
+                    if (!summary[name]) {
+                        summary[name] = { weeklyMs: 0, monthlyMs: 0 };
+                    }
+                    
+                    if (recordDate >= startOfWeek) {
+                        summary[name].weeklyMs += duration;
+                    }
+                    if (recordDate.getMonth() === today.getMonth() && recordDate.getFullYear() === today.getFullYear()) {
+                        summary[name].monthlyMs += duration;
+                    }
+                });
+
+                const sortedNames = Object.keys(summary).sort();
+                if (sortedNames.length === 0) {
+                    showAlert('Tidak Ada Data', 'Tidak ada data akumulasi per karyawan untuk diekspor.');
+                    return;
+                }
+                
+                const data = [['Nama Karyawan', 'Total Jam Kerja Minggu Ini', 'Total Jam Kerja Bulan Ini']];
+                sortedNames.forEach(name => {
+                    data.push([
+                        name,
+                        formatDuration(summary[name].weeklyMs),
+                        formatDuration(summary[name].monthlyMs)
+                    ]);
+                });
+
+                const ws = XLSX.utils.aoa_to_sheet(data);
+                const wb = XLSX.utils.book_new();
+                XLSX.utils.book_append_sheet(wb, ws, "Akumulasi Karyawan");
+                
+                XLSX.writeFile(wb, `Laporan_Akumulasi_Karyawan_${new Date().getFullYear()}-${new Date().getMonth() + 1}-${new Date().getDate()}.xlsx`);
+            }
+
 
             // --- Helper Functions ---
             function getRecords() {
