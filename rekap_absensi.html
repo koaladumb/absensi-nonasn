@@ -3,9 +3,11 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Rekapitulasi Kehadiran Karyawan (Timestamp)</title>
+    <title>Rekapitulasi Kehadiran Karyawan (Supabase)</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <!-- Supabase JavaScript Library -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <!-- SheetJS library for Excel export -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <style>
@@ -17,11 +19,15 @@
         .card {
             background-color: #161b22;
             border: 1px solid #30363d;
+            border-radius: 0.5rem;
         }
         .input-field {
             background-color: #0d1117;
             border: 1px solid #30363d;
             color: #c9d1d9;
+            border-radius: 0.25rem;
+            padding: 0.5rem;
+            width: 100%;
         }
         .input-field:focus {
             outline: none;
@@ -33,16 +39,21 @@
             color: white;
             border: 1px solid rgba(240, 246, 252, 0.1);
             transition: background-color 0.2s;
+            border-radius: 0.375rem;
+            padding: 0.5rem 1rem;
+            font-weight: 600;
         }
-        .btn-primary:hover {
+        .btn-primary:hover:not(.disabled) {
             background-color: #2ea043;
         }
         .btn-secondary {
             background-color: #21262d;
             border: 1px solid #30363d;
             transition: background-color 0.2s, border-color 0.2s;
+            border-radius: 0.375rem;
+            padding: 0.5rem 1rem;
         }
-        .btn-secondary:hover {
+        .btn-secondary:hover:not(.disabled) {
             background-color: #30363d;
             border-color: #8b949e;
         }
@@ -51,8 +62,10 @@
             color: white;
             border: 1px solid #f85149;
             transition: all 0.2s;
+            border-radius: 0.375rem;
+            padding: 0.5rem 1rem;
         }
-        .btn-danger:hover {
+        .btn-danger:hover:not(.disabled) {
             background-color: #f85149;
             border-color: #f85149;
         }
@@ -64,12 +77,6 @@
         }
         .modal {
             transition: opacity 0.25s ease;
-        }
-        .file-upload-label {
-            cursor: pointer;
-        }
-        .file-upload-input {
-            display: none;
         }
         .table-container {
             max-height: 400px;
@@ -86,65 +93,73 @@
         input[type="date"]::-webkit-calendar-picker-indicator {
             filter: invert(1);
         }
+        .loading-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.6);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 20;
+        }
+        .spinner {
+            border: 4px solid rgba(255, 255, 255, 0.3);
+            border-top: 4px solid #fff;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
     </style>
 </head>
 <body class="p-4 md:p-8">
     <div class="max-w-7xl mx-auto">
-        <header class="text-center mb-8">
+        <header class="text-center mb-4">
             <h1 class="text-3xl md:text-4xl font-bold text-white">Rekapitulasi Kehadiran Karyawan</h1>
-            <p class="text-gray-400 mt-2">Input data kehadiran menggunakan Unix Timestamp untuk kalkulasi otomatis.</p>
+            <p class="text-gray-400 mt-2">Data disimpan secara *real-time* di Supabase.</p>
         </header>
 
         <main class="grid grid-cols-1 lg:grid-cols-5 gap-6">
-            <!-- Kolom Input & Ringkasan Akumulasi Total -->
+            <!-- Kolom Input & Ringkasan -->
             <div class="lg:col-span-2 flex flex-col gap-6">
                 <!-- Card Input Data -->
-                <div class="card p-6 rounded-lg">
+                <div id="inputDataCard" class="card p-6 relative">
                     <h2 class="text-xl font-semibold mb-4 text-white">Input Data Kehadiran</h2>
+                    <div id="loadingOverlay" class="loading-overlay hidden">
+                        <div class="spinner"></div>
+                    </div>
                     <div class="space-y-4">
                         <div>
                             <label for="employeeName" class="block text-sm font-medium mb-1">Nama Karyawan</label>
-                            <input type="text" id="employeeName" class="input-field w-full p-2 rounded-md" placeholder="e.g., Budi Santoso">
+                            <input type="text" id="employeeName" class="input-field" placeholder="e.g., Budi Santoso">
                         </div>
                         <div>
-                            <label for="clockInTimestamp" class="block text-sm font-medium mb-1">Timestamp Masuk</label>
-                            <input type="number" id="clockInTimestamp" class="input-field w-full p-2 rounded-md" placeholder="e.g., 1725152400">
+                            <label for="clockInTimestamp" class="block text-sm font-medium mb-1">Timestamp Masuk (Unix)</label>
+                            <input type="number" id="clockInTimestamp" class="input-field" placeholder="e.g., 1725152400">
                             <p id="clockInPreview" class="timestamp-preview"></p>
                         </div>
                         <div>
-                            <label for="clockOutTimestamp" class="block text-sm font-medium mb-1">Timestamp Pulang</label>
-                            <input type="number" id="clockOutTimestamp" class="input-field w-full p-2 rounded-md" placeholder="e.g., 1725184800">
+                            <label for="clockOutTimestamp" class="block text-sm font-medium mb-1">Timestamp Pulang (Unix)</label>
+                            <input type="number" id="clockOutTimestamp" class="input-field" placeholder="e.g., 1725184800">
                             <p id="clockOutPreview" class="timestamp-preview"></p>
                         </div>
-                        <button id="saveButton" class="w-full btn-primary font-semibold py-2 px-4 rounded-md">Simpan Data</button>
+                        <button id="saveButton" class="w-full btn-primary font-semibold">Simpan</button>
                     </div>
                 </div>
 
-                <!-- Card Akumulasi Total -->
-                 <div class="card p-6 rounded-lg">
-                    <h2 class="text-xl font-semibold mb-4 text-white">Akumulasi Total</h2>
-                     <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-center">
-                        <div>
-                            <p class="text-sm text-gray-400">Total Jam Kerja Minggu Ini</p>
-                            <p id="weeklyHours" class="text-2xl font-bold">-</p>
-                        </div>
-                        <div>
-                            <p class="text-sm text-gray-400">Total Jam Kerja Bulan Ini</p>
-                            <p id="monthlyHours" class="text-2xl font-bold">-</p>
-                        </div>
-                    </div>
-                </div>
-                
                 <!-- Menu Kelola Data -->
-                <div class="card p-6 rounded-lg">
+                <div id="manageDataCard" class="card p-6">
                     <h2 class="text-xl font-semibold mb-4 text-white">Kelola Data</h2>
                     <div class="grid grid-cols-1 gap-4">
-                        <button id="backupDataBtn" class="w-full btn-secondary font-semibold py-2 px-4 rounded-md">Backup Database (JSON)</button>
-                        <label for="restoreFile" class="w-full btn-secondary font-semibold py-2 px-4 rounded-md text-center file-upload-label">
-                            Restore Database (JSON)
-                        </label>
-                        <input type="file" id="restoreFile" class="file-upload-input" accept=".json">
-                        <button id="deleteAllDataBtn" class="w-full btn-danger font-semibold py-2 px-4 rounded-md">Hapus Semua Data</button>
+                         <p class="text-sm text-gray-500 text-center">Fitur ini menghapus seluruh data yang tersimpan.</p>
+                        <button id="clearAllDataBtn" class="w-full btn-danger font-semibold">Hapus Semua Data</button>
                     </div>
                 </div>
             </div>
@@ -152,10 +167,10 @@
             <!-- Kolom Riwayat & Akumulasi per Karyawan -->
             <div class="lg:col-span-3 flex flex-col gap-6">
                  <!-- Tabel Rekapitulasi Kehadiran -->
-                <div class="card p-6 rounded-lg">
+                <div class="card p-6">
                     <div class="flex justify-between items-center mb-4">
-                        <h2 class="text-xl font-semibold text-white">Tabel Rekapitulasi Kehadiran</h2>
-                        <button id="exportHistoryBtn" class="btn-primary font-semibold py-2 px-4 rounded-md">Ekspor XLSX</button>
+                        <h2 class="text-xl font-semibold text-white">Tabel Riwayat Kehadiran</h2>
+                        <button id="exportHistoryBtn" class="btn-primary font-semibold">Ekspor XLSX</button>
                     </div>
                     <div class="overflow-x-auto table-container">
                         <table class="w-full text-left text-sm">
@@ -180,23 +195,23 @@
                 </div>
                 
                 <!-- Tabel Akumulasi per Karyawan -->
-                <div class="card p-6 rounded-lg">
+                <div class="card p-6">
                     <div class="flex justify-between items-center mb-4">
                         <h2 class="text-xl font-semibold text-white">Akumulasi Per Karyawan</h2>
-                        <button id="exportSummaryBtn" class="btn-primary font-semibold py-2 px-4 rounded-md">Ekspor XLSX</button>
+                        <button id="exportSummaryBtn" class="btn-primary font-semibold">Ekspor XLSX</button>
                     </div>
                     <div class="space-y-4 mb-4">
                         <div class="flex items-center space-x-4">
                             <div>
                                 <label for="startDate" class="block text-sm font-medium mb-1">Tanggal Mulai</label>
-                                <input type="date" id="startDate" class="input-field p-2 rounded-md">
+                                <input type="date" id="startDate" class="input-field">
                             </div>
                             <div>
                                 <label for="endDate" class="block text-sm font-medium mb-1">Tanggal Akhir</label>
-                                <input type="date" id="endDate" class="input-field p-2 rounded-md">
+                                <input type="date" id="endDate" class="input-field">
                             </div>
                             <div class="self-end pb-[2px]">
-                                <button id="showSummaryBtn" class="btn-secondary font-semibold py-2 px-4 rounded-md">Tampilkan</button>
+                                <button id="showSummaryBtn" class="btn-secondary font-semibold">Tampilkan</button>
                             </div>
                         </div>
                     </div>
@@ -214,6 +229,21 @@
                         </table>
                     </div>
                 </div>
+
+                <!-- Card Akumulasi Total -->
+                <div class="card p-6">
+                    <h2 class="text-xl font-semibold mb-4 text-white">Akumulasi Total</h2>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-center">
+                        <div>
+                            <p class="text-sm text-gray-400">Total Jam Kerja Minggu Ini</p>
+                            <p id="weeklyHours" class="text-2xl font-bold">-</p>
+                        </div>
+                        <div>
+                            <p class="text-sm text-gray-400">Total Jam Kerja Bulan Ini</p>
+                            <p id="monthlyHours" class="text-2xl font-bold">-</p>
+                        </div>
+                    </div>
+                </div>
             </div>
         </main>
     </div>
@@ -224,93 +254,96 @@
             <h3 id="modalTitle" class="text-lg font-bold mb-4 text-white"></h3>
             <p id="modalMessage" class="mb-6"></p>
             <div id="modalActions" class="flex justify-end gap-4">
-                <!-- Buttons will be injected here -->
+                <!-- Tombol akan ditambahkan di sini -->
             </div>
         </div>
     </div>
 
     <script>
         document.addEventListener('DOMContentLoaded', () => {
-            // Referensi Elemen DOM
+            // Ganti placeholder ini dengan URL dan Kunci Anonim dari proyek Supabase Anda.
+            // Anda dapat menemukannya di Project Settings > API.
+            const SUPABASE_URL = 'https://vijqvhwcapermeiftzqn.supabase.co';
+            const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZpanF2aHdjYXBlcm1laWZ0enFuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTY3NjUzMDIsImV4cCI6MjA3MjM0MTMwMn0.HkVgodnM3AB8856FukeydmGVb-IiFJ3zahqSxrd84Tk';
+            const TABLE_NAME = 'attendance_records';
+
+            const supabase = Supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
             const nameInput = document.getElementById('employeeName');
             const clockInTimestampInput = document.getElementById('clockInTimestamp');
             const clockOutTimestampInput = document.getElementById('clockOutTimestamp');
             const clockInPreview = document.getElementById('clockInPreview');
             const clockOutPreview = document.getElementById('clockOutPreview');
             const saveButton = document.getElementById('saveButton');
+            const loadingOverlay = document.getElementById('loadingOverlay');
             
-            // Elemen Display
             const weeklyHoursEl = document.getElementById('weeklyHours');
             const monthlyHoursEl = document.getElementById('monthlyHours');
             const historyTableBody = document.getElementById('historyTableBody');
             const employeeSummaryTableBody = document.getElementById('employeeSummaryTableBody');
-
-            // Modal elements
+            
+            const clearAllDataBtn = document.getElementById('clearAllDataBtn');
             const modal = document.getElementById('modal');
             const modalTitle = document.getElementById('modalTitle');
             const modalMessage = document.getElementById('modalMessage');
             const modalActions = document.getElementById('modalActions');
-
-            // Elemen menu Kelola Data
-            const backupDataBtn = document.getElementById('backupDataBtn');
-            const restoreFile = document.getElementById('restoreFile');
-            const deleteAllDataBtn = document.getElementById('deleteAllDataBtn');
+            
             const exportHistoryBtn = document.getElementById('exportHistoryBtn');
             const exportSummaryBtn = document.getElementById('exportSummaryBtn');
 
-            // Elemen Tanggal Akumulasi
             const startDateInput = document.getElementById('startDate');
             const endDateInput = document.getElementById('endDate');
             const showSummaryBtn = document.getElementById('showSummaryBtn');
             const summaryDurationHeader = document.getElementById('summaryDurationHeader');
-
-            // Kunci Local Storage
-            const RECORDS_KEY = 'attendanceRecords_ts';
-
-            // Inisialisasi Aplikasi
-            calculateAndRenderAll();
-            setInitialDateRange();
-
-            // Event Listeners
+            
+            // --- Event Listeners ---
             clockInTimestampInput.addEventListener('input', (e) => handleTimestampInput(e, clockInPreview));
             clockOutTimestampInput.addEventListener('input', (e) => handleTimestampInput(e, clockOutPreview));
             saveButton.addEventListener('click', handleSaveRecord);
             historyTableBody.addEventListener('click', handleHistoryActions);
-            
-            // Event Listeners for the new menu
-            backupDataBtn.addEventListener('click', handleBackupData);
-            restoreFile.addEventListener('change', handleRestoreData);
-            deleteAllDataBtn.addEventListener('click', handleDeleteAllData);
+            clearAllDataBtn.addEventListener('click', handleClearAllData);
             exportHistoryBtn.addEventListener('click', handleExportHistoryXlsx);
             exportSummaryBtn.addEventListener('click', handleExportSummaryXlsx);
             showSummaryBtn.addEventListener('click', handleShowSummary);
+            
+            // Set rentang tanggal awal
+            setInitialDateRange();
 
-            // Fungsi untuk menetapkan rentang tanggal awal (mis. 1 bulan terakhir)
-            function setInitialDateRange() {
-                const today = new Date();
-                const oneMonthAgo = new Date();
-                oneMonthAgo.setMonth(today.getMonth() - 1);
-                
-                const formatDate = (date) => {
-                    const year = date.getFullYear();
-                    const month = String(date.getMonth() + 1).padStart(2, '0');
-                    const day = String(date.getDate()).padStart(2, '0');
-                    return `${year}-${month}-${day}`;
-                };
-                
-                startDateInput.value = formatDate(oneMonthAgo);
-                endDateInput.value = formatDate(today);
-                handleShowSummary(); // Tampilkan data awal
+            // Dengarkan perubahan real-time dari Supabase
+            // Saat ada perubahan (INSERT, UPDATE, DELETE), panggil render ulang
+            supabase
+                .from(TABLE_NAME)
+                .on('*', payload => {
+                    console.log('Change received!', payload);
+                    calculateAndRenderAll();
+                })
+                .subscribe();
+
+            // Panggil render awal saat halaman dimuat
+            calculateAndRenderAll();
+            
+            // --- Core Functions ---
+            
+            // Fungsi untuk mendapatkan data dari Supabase
+            async function getRecords() {
+                showLoading();
+                const { data, error } = await supabase.from(TABLE_NAME).select('*');
+                hideLoading();
+                if (error) {
+                    console.error("Error fetching data:", error);
+                    showAlert("Error", "Gagal memuat data dari database.");
+                    return [];
+                }
+                return data || [];
             }
             
-            // Fungsi untuk mengkonversi timestamp ke format tanggal & waktu saat user mengetik
+            // Fungsi untuk menampilkan pratinjau tanggal dari timestamp
             function handleTimestampInput(event, displayElement) {
                 const timestamp = parseInt(event.target.value);
                 if (timestamp && !isNaN(timestamp)) {
-                    // Cek apakah timestamp dalam milidetik atau detik
-                    const isMs = timestamp > 1e12; // Jika lebih besar dari 1 triliun, asumsikan milidetik
+                    const isMs = timestamp > 1e12; 
                     const date = new Date(isMs ? timestamp : timestamp * 1000);
-                    if (!isNaN(date)) {
+                    if (!isNaN(date.getTime())) {
                          displayElement.textContent = date.toLocaleString('id-ID', {
                             weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', 
                             hour: '2-digit', minute: '2-digit', second: '2-digit'
@@ -322,15 +355,15 @@
                     displayElement.textContent = '';
                 }
             }
-
-            // Fungsi untuk menyimpan atau memperbarui record kehadiran
-            function handleSaveRecord() {
+            
+            // Fungsi untuk menyimpan data kehadiran baru ke Supabase
+            async function handleSaveRecord() {
                 const name = nameInput.value.trim();
                 const clockInValue = clockInTimestampInput.value;
                 const clockOutValue = clockOutTimestampInput.value;
 
                 if (!name || (!clockInValue && !clockOutValue)) {
-                    showAlert('Input Tidak Lengkap', 'Harap isi nama karyawan dan minimal satu timestamp (masuk atau pulang).');
+                    showAlert('Input Tidak Lengkap', 'Harap isi nama karyawan dan minimal satu timestamp.');
                     return;
                 }
 
@@ -341,87 +374,79 @@
                     showAlert('Input Tidak Valid', 'Timestamp Pulang harus lebih besar dari Timestamp Masuk.');
                     return;
                 }
-
-                const referenceTimestamp = clockInTimestamp || clockOutTimestamp;
-                const recordDate = new Date(referenceTimestamp * 1000);
                 
-                const startOfDay = new Date(recordDate);
-                startOfDay.setHours(0, 0, 0, 0);
-                const startOfDayTs = startOfDay.getTime() / 1000;
+                showLoading();
+                const { error } = await supabase.from(TABLE_NAME).insert([
+                    { name, clock_in_timestamp: clockInTimestamp, clock_out_timestamp: clockOutTimestamp }
+                ]);
+                hideLoading();
 
-                const endOfDay = new Date(recordDate);
-                endOfDay.setHours(23, 59, 59, 999);
-                const endOfDayTs = endOfDay.getTime() / 1000;
-
-                let records = getRecords();
-                
-                const recordIndex = records.findIndex(r => {
-                    const existingRecordTs = r.clockInTimestamp || r.clockOutTimestamp;
-                    return r.name.toLowerCase() === name.toLowerCase() && 
-                           existingRecordTs >= startOfDayTs && 
-                           existingRecordTs < endOfDayTs;
-                });
-
-                if (recordIndex > -1) {
-                    // Update existing record
-                    if (clockInTimestamp) records[recordIndex].clockInTimestamp = clockInTimestamp;
-                    if (clockOutTimestamp) records[recordIndex].clockOutTimestamp = clockOutTimestamp;
-                } else {
-                    // Create a new record
-                    const newRecord = {
-                        id: Date.now(),
-                        name,
-                        clockInTimestamp: clockInTimestamp,
-                        clockOutTimestamp: clockOutTimestamp
-                    };
-                    records.push(newRecord);
+                if (error) {
+                    console.error("Error saving data:", error);
+                    showAlert("Gagal", "Gagal menyimpan data ke database.");
+                    return;
                 }
                 
-                localStorage.setItem(RECORDS_KEY, JSON.stringify(records));
-                
+                showAlert("Berhasil", "Data berhasil disimpan!");
                 nameInput.value = '';
                 clockInTimestampInput.value = '';
                 clockOutTimestampInput.value = '';
                 clockInPreview.textContent = '';
                 clockOutPreview.textContent = '';
-
-                calculateAndRenderAll();
             }
-            
-            function handleHistoryActions(e) {
+
+            // Fungsi untuk menghapus data dari Supabase
+            async function handleHistoryActions(e) {
                 if (e.target.classList.contains('delete-btn')) {
                     const recordId = e.target.dataset.id;
-                    showConfirm('Konfirmasi Hapus', 'Apakah Anda yakin ingin menghapus data ini?', () => {
-                        deleteRecord(recordId);
-                        calculateAndRenderAll();
+                    showConfirm('Konfirmasi Hapus', 'Apakah Anda yakin ingin menghapus data ini?', async () => {
+                        showLoading();
+                        const { error } = await supabase.from(TABLE_NAME).delete().eq('id', recordId);
+                        hideLoading();
+                        if (error) {
+                            console.error("Error deleting data:", error);
+                            showAlert("Gagal", "Gagal menghapus data dari database.");
+                            return;
+                        }
+                        showAlert("Berhasil", "Data berhasil dihapus.");
                     });
                 }
             }
             
-            function deleteRecord(id) {
-                let records = getRecords();
-                records = records.filter(r => r.id !== parseInt(id));
-                localStorage.setItem(RECORDS_KEY, JSON.stringify(records));
+            // Fungsi untuk menghapus semua data dari Supabase
+            async function handleClearAllData() {
+                showConfirm('Konfirmasi Hapus Semua', 'Apakah Anda yakin ingin menghapus semua data? Tindakan ini tidak dapat dibatalkan.', async () => {
+                    showLoading();
+                    const { error } = await supabase.from(TABLE_NAME).delete().neq('id', '00000000-0000-0000-0000-000000000000');
+                    hideLoading();
+                    if (error) {
+                        console.error("Error deleting all data:", error);
+                        showAlert("Gagal", "Gagal menghapus semua data dari database.");
+                        return;
+                    }
+                    showAlert("Berhasil", "Semua data berhasil dihapus.");
+                });
             }
 
-            function calculateAndRenderAll() {
-                renderHistoryTable();
-                renderAggregateSummaries();
-                // renderEmployeeSummary(); // This is now called via handleShowSummary
+            // Fungsi utama untuk mengambil dan menampilkan semua data
+            async function calculateAndRenderAll() {
+                const records = await getRecords();
+                renderHistoryTable(records);
+                renderAggregateSummaries(records);
+                handleShowSummary();
             }
             
-            function renderHistoryTable() {
-                const records = getRecords();
-                
-                records.sort((a, b) => (b.clockInTimestamp || b.clockOutTimestamp) - (a.clockInTimestamp || a.clockOutTimestamp));
-
+            // Fungsi untuk menampilkan riwayat kehadiran dalam tabel
+            function renderHistoryTable(data) {
                 historyTableBody.innerHTML = '';
-                if (records.length === 0) {
+                if (data.length === 0) {
                     historyTableBody.innerHTML = `<tr><td colspan="9" class="text-center p-4 text-gray-500">Belum ada data.</td></tr>`;
                     return;
                 }
+                
+                // Urutkan data berdasarkan timestamp terbaru
+                data.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
 
-                // Default working schedule based on day
                 const defaultDailySchedule = {
                     mon: { in: '07:30', out: '15:30' },
                     tue: { in: '07:30', out: '15:30' },
@@ -432,14 +457,13 @@
                     sun: { in: '08:00', out: '17:00' }
                 };
 
-                records.forEach(r => {
-                    const clockInDate = r.clockInTimestamp ? new Date(r.clockInTimestamp * 1000) : null;
-                    const clockOutDate = r.clockOutTimestamp ? new Date(r.clockOutTimestamp * 1000) : null;
-
+                data.forEach(r => {
+                    const clockInDate = r.clock_in_timestamp ? new Date(r.clock_in_timestamp * 1000) : null;
+                    const clockOutDate = r.clock_out_timestamp ? new Date(r.clock_out_timestamp * 1000) : null;
                     const displayDateObj = clockInDate || clockOutDate;
                     if (!displayDateObj) return; 
                     
-                    const dayOfWeek = displayDateObj.getDay(); // 0 = Sunday, 1 = Monday, ..., 6 = Saturday
+                    const dayOfWeek = displayDateObj.getDay();
                     const days = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
                     const dayKey = days[dayOfWeek];
                     
@@ -484,8 +508,8 @@
                 });
             }
 
-            function renderAggregateSummaries() {
-                const records = getRecords();
+            // Fungsi untuk menghitung ringkasan total (mingguan, bulanan)
+            function renderAggregateSummaries(data) {
                 const today = new Date();
                 today.setHours(0, 0, 0, 0);
                 const startOfWeek = new Date(today);
@@ -496,10 +520,10 @@
                 let weeklyMs = 0;
                 let monthlyMs = 0;
                 
-                records.forEach(r => {
-                    if (r.clockInTimestamp && r.clockOutTimestamp) {
-                        const recordDate = new Date(r.clockInTimestamp * 1000);
-                        const duration = (r.clockOutTimestamp - r.clockInTimestamp) * 1000;
+                data.forEach(r => {
+                    if (r.clock_in_timestamp && r.clock_out_timestamp) {
+                        const recordDate = new Date(r.clock_in_timestamp * 1000);
+                        const duration = (r.clock_out_timestamp - r.clock_in_timestamp) * 1000;
                         if (recordDate >= startOfWeek) weeklyMs += duration;
                         if (recordDate.getMonth() === currentMonth && recordDate.getFullYear() === currentYear) monthlyMs += duration;
                     }
@@ -509,8 +533,9 @@
                 monthlyHoursEl.textContent = formatDuration(monthlyMs);
             }
             
-            // Fungsi baru untuk menampilkan ringkasan berdasarkan rentang tanggal
-            function handleShowSummary() {
+            // Fungsi untuk menampilkan ringkasan kehadiran per karyawan
+            async function handleShowSummary() {
+                const records = await getRecords();
                 const startDate = startDateInput.value ? new Date(startDateInput.value) : null;
                 const endDate = endDateInput.value ? new Date(endDateInput.value) : null;
 
@@ -524,27 +549,23 @@
                     return;
                 }
                 
-                // Tambahkan 1 hari ke tanggal akhir agar inklusif
                 const adjustedEndDate = new Date(endDate);
                 adjustedEndDate.setDate(adjustedEndDate.getDate() + 1);
 
-                renderEmployeeSummary(startDate, adjustedEndDate);
+                renderEmployeeSummary(records, startDate, adjustedEndDate);
             }
 
-            // Fungsi untuk merender akumulasi per karyawan
-            function renderEmployeeSummary(startDate, endDate) {
-                const records = getRecords();
+            // Fungsi untuk merender tabel ringkasan per karyawan
+            function renderEmployeeSummary(data, startDate, endDate) {
                 const summary = {};
-                
-                // Perbarui judul kolom
                 summaryDurationHeader.textContent = `Durasi (${startDate.toLocaleDateString('id-ID')} - ${endDate.toLocaleDateString('id-ID')})`;
                 
-                records.forEach(r => {
-                    if (!r.clockInTimestamp || !r.clockOutTimestamp) return;
-                    const recordDate = new Date(r.clockInTimestamp * 1000);
+                data.forEach(r => {
+                    if (!r.clock_in_timestamp || !r.clock_out_timestamp) return;
+                    const recordDate = new Date(r.clock_in_timestamp * 1000);
 
                     if (recordDate >= startDate && recordDate < endDate) {
-                        const duration = (r.clockOutTimestamp - r.clockInTimestamp) * 1000;
+                        const duration = (r.clock_out_timestamp - r.clock_in_timestamp) * 1000;
                         const name = r.name;
                         if (!summary[name]) {
                             summary[name] = 0;
@@ -577,200 +598,155 @@
             function showAlert(title, message) {
                 modalTitle.textContent = title;
                 modalMessage.textContent = message;
-                modalActions.innerHTML = `<button id="modalOkBtn" class="btn-primary py-2 px-4 rounded-md">OK</button>`;
+                modalActions.innerHTML = `<button id="closeModalBtn" class="btn-secondary font-semibold">Tutup</button>`;
                 modal.classList.remove('hidden');
-                document.getElementById('modalOkBtn').focus();
-                
-                document.getElementById('modalOkBtn').onclick = () => {
-                    modal.classList.add('hidden');
-                };
+                document.getElementById('closeModalBtn').addEventListener('click', () => modal.classList.add('hidden'));
             }
 
             function showConfirm(title, message, onConfirm) {
                 modalTitle.textContent = title;
                 modalMessage.textContent = message;
                 modalActions.innerHTML = `
-                    <button id="modalCancelBtn" class="btn-secondary py-2 px-4 rounded-md">Batal</button>
-                    <button id="modalConfirmBtn" class="btn-danger py-2 px-4 rounded-md">Ya, Hapus</button>
+                    <button id="cancelModalBtn" class="btn-secondary font-semibold">Batal</button>
+                    <button id="confirmModalBtn" class="btn-danger font-semibold">Konfirmasi</button>
                 `;
                 modal.classList.remove('hidden');
-                document.getElementById('modalConfirmBtn').focus();
-
-                const confirmBtn = document.getElementById('modalConfirmBtn');
-                const cancelBtn = document.getElementById('modalCancelBtn');
-
-                const cleanup = () => {
+                document.getElementById('cancelModalBtn').addEventListener('click', () => modal.classList.add('hidden'));
+                document.getElementById('confirmModalBtn').addEventListener('click', () => {
                     modal.classList.add('hidden');
-                }
-                
-                confirmBtn.onclick = () => {
-                    cleanup();
                     onConfirm();
-                };
-                cancelBtn.onclick = () => {
-                    cleanup();
-                };
-            }
-
-            // --- New functions for Data Management ---
-            function handleBackupData() {
-                const data = {
-                    records: getRecords()
-                };
-                const dataStr = JSON.stringify(data, null, 2);
-                const blob = new Blob([dataStr], {type: "application/json"});
-                const url = URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = `backup_rekap_kehadiran_${Date.now()}.json`;
-                document.body.appendChild(a);
-                a.click();
-                document.body.removeChild(a);
-                URL.revokeObjectURL(url);
-            }
-
-            function handleRestoreData(event) {
-                const file = event.target.files[0];
-                if (!file) {
-                    return;
-                }
-
-                const reader = new FileReader();
-                reader.onload = (e) => {
-                    try {
-                        const restoredData = JSON.parse(e.target.result);
-                        if (restoredData.records) {
-                            showConfirm('Konfirmasi Restore', 'Ini akan menimpa semua data yang ada. Lanjutkan?', () => {
-                                localStorage.setItem(RECORDS_KEY, JSON.stringify(restoredData.records));
-                                showAlert('Berhasil', 'Data berhasil dipulihkan!');
-                                calculateAndRenderAll();
-                                handleShowSummary(); // Tampilkan data akumulasi yang baru
-                            });
-                        } else {
-                            showAlert('Gagal', 'File JSON tidak valid. Harap unggah file backup yang benar.');
-                        }
-                    } catch (error) {
-                        showAlert('Gagal', 'Terjadi kesalahan saat membaca file. Pastikan file berformat JSON yang benar.');
-                    }
-                };
-                reader.readAsText(file);
-            }
-
-            function handleDeleteAllData() {
-                showConfirm('Konfirmasi Hapus Semua', 'Apakah Anda yakin ingin menghapus SEMUA data kehadiran? Tindakan ini tidak bisa dibatalkan.', () => {
-                    localStorage.removeItem(RECORDS_KEY);
-                    showAlert('Berhasil', 'Semua data telah dihapus.');
-                    calculateAndRenderAll();
-                    handleShowSummary(); // Perbarui tabel ringkasan
                 });
             }
 
-            // --- New function for XLSX export (History Table) ---
-            function handleExportHistoryXlsx() {
-                const records = getRecords();
-                const tableBody = historyTableBody.children;
-
-                if (records.length === 0) {
-                    showAlert('Tidak Ada Data', 'Tidak ada data kehadiran untuk diekspor.');
-                    return;
-                }
-
-                const data = [];
-                // Headers
-                data.push(['Nama Karyawan', 'Hari', 'Tanggal', 'Jam Masuk', 'Jam Pulang', 'Terlambat', 'Pulang Awal', 'Durasi Kerja']);
-
-                // Data rows
-                for (let i = 0; i < tableBody.length; i++) {
-                    const row = tableBody[i];
-                    const cells = row.querySelectorAll('td');
-                    const rowData = [
-                        cells[0].innerText, // Nama
-                        cells[1].innerText, // Hari
-                        cells[2].innerText, // Tanggal
-                        cells[3].innerText, // Jam Masuk
-                        cells[4].innerText, // Jam Pulang
-                        cells[5].innerText, // Terlambat
-                        cells[6].innerText, // Pulang Awal
-                        cells[7].innerText  // Durasi Kerja
-                    ];
-                    data.push(rowData);
-                }
-
-                const ws = XLSX.utils.aoa_to_sheet(data);
-                const wb = XLSX.utils.book_new();
-                XLSX.utils.book_append_sheet(wb, ws, "Rekap Kehadiran");
-                
-                XLSX.writeFile(wb, `Laporan_Kehadiran_${new Date().getFullYear()}-${new Date().getMonth() + 1}-${new Date().getDate()}.xlsx`);
+            // --- Loading Functions ---
+            function showLoading() {
+                loadingOverlay.classList.remove('hidden');
             }
-            
-            // --- NEW: Function to export Summary Table to XLSX ---
-            function handleExportSummaryXlsx() {
-                const startDate = startDateInput.value ? new Date(startDateInput.value) : null;
-                const endDate = endDateInput.value ? new Date(endDateInput.value) : null;
-                
-                if (!startDate || !endDate || startDate > endDate) {
-                    showAlert('Kesalahan Ekspor', 'Harap isi rentang tanggal yang valid sebelum mengekspor.');
+
+            function hideLoading() {
+                loadingOverlay.classList.add('hidden');
+            }
+
+            // --- Excel Export Functions ---
+            async function handleExportHistoryXlsx() {
+                const { data: records, error } = await supabase.from(TABLE_NAME).select('*');
+                if (error) {
+                    console.error("Error exporting data:", error);
+                    showAlert("Error", "Gagal mengambil data untuk ekspor.");
                     return;
                 }
 
-                const records = getRecords();
-                const summary = {};
-                
-                const adjustedEndDate = new Date(endDate);
-                adjustedEndDate.setDate(adjustedEndDate.getDate() + 1);
-                
-                records.forEach(r => {
-                    if (!r.clockInTimestamp || !r.clockOutTimestamp) return;
-                    const recordDate = new Date(r.clockInTimestamp * 1000);
+                const data = [['Nama', 'Hari', 'Tanggal', 'Jam Masuk', 'Jam Pulang', 'Terlambat', 'Pulang Awal', 'Durasi Kerja']];
+                records.sort((a, b) => a.name.localeCompare(b.name)).forEach(r => {
+                    const clockInDate = r.clock_in_timestamp ? new Date(r.clock_in_timestamp * 1000) : null;
+                    const clockOutDate = r.clock_out_timestamp ? new Date(r.clock_out_timestamp * 1000) : null;
+                    const displayDateObj = clockInDate || clockOutDate;
+                    if (!displayDateObj) return;
 
-                    if (recordDate >= startDate && recordDate < adjustedEndDate) {
-                        const duration = (r.clockOutTimestamp - r.clockInTimestamp) * 1000;
-                        const name = r.name;
-                        if (!summary[name]) {
-                            summary[name] = 0;
-                        }
-                        summary[name] += duration;
+                    const dayOfWeek = displayDateObj.getDay();
+                    const days = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
+                    const dayKey = days[dayOfWeek];
+                    const schedule = {
+                        mon: { in: '07:30', out: '15:30' },
+                        tue: { in: '07:30', out: '15:30' },
+                        wed: { in: '07:30', out: '15:30' },
+                        thu: { in: '07:30', out: '15:30' },
+                        fri: { in: '07:30', out: '16:00' },
+                        sat: { in: '08:00', out: '17:00' },
+                        sun: { in: '08:00', out: '17:00' }
+                    }[dayKey];
+
+                    let latenessMs = null, earlyLeaveMs = null, workDurationMs = null;
+                    if (clockInDate) {
+                        const standardInTime = new Date(displayDateObj);
+                        standardInTime.setHours(schedule.in.split(':')[0], schedule.in.split(':')[1], 0, 0);
+                        latenessMs = Math.max(0, clockInDate - standardInTime);
                     }
-                });
+                    if (clockOutDate) {
+                        const standardOutTime = new Date(displayDateObj);
+                        standardOutTime.setHours(schedule.out.split(':')[0], schedule.out.split(':')[1], 0, 0);
+                        earlyLeaveMs = Math.max(0, standardOutTime - clockOutDate);
+                    }
+                    if (clockInDate && clockOutDate) workDurationMs = clockOutDate - clockInDate;
 
-                const sortedNames = Object.keys(summary).sort();
-                if (sortedNames.length === 0) {
-                    showAlert('Tidak Ada Data', 'Tidak ada data akumulasi per karyawan untuk diekspor dalam rentang tanggal ini.');
-                    return;
-                }
-                
-                const data = [['Nama Karyawan', `Durasi Kerja (${startDate.toLocaleDateString('id-ID')} - ${endDate.toLocaleDateString('id-ID')})`]];
-                sortedNames.forEach(name => {
                     data.push([
-                        name,
-                        formatDuration(summary[name])
+                        r.name,
+                        displayDateObj.toLocaleDateString('id-ID', {weekday: 'long'}),
+                        displayDateObj.toLocaleDateString('id-ID', {day: '2-digit', month: 'short', year: 'numeric'}),
+                        clockInDate ? clockInDate.toLocaleTimeString('id-ID', {hour: '2-digit', minute: '2-digit'}) : '-',
+                        clockOutDate ? clockOutDate.toLocaleTimeString('id-ID', {hour: '2-digit', minute: '2-digit'}) : '-',
+                        latenessMs !== null ? formatDuration(latenessMs) : '-',
+                        earlyLeaveMs !== null ? formatDuration(earlyLeaveMs) : '-',
+                        workDurationMs !== null ? formatDuration(workDurationMs) : '-'
                     ]);
                 });
 
                 const ws = XLSX.utils.aoa_to_sheet(data);
                 const wb = XLSX.utils.book_new();
+                XLSX.utils.book_append_sheet(wb, ws, "Riwayat Kehadiran");
+                XLSX.writeFile(wb, "Riwayat_Kehadiran.xlsx");
+            }
+
+            async function handleExportSummaryXlsx() {
+                const records = await getRecords();
+                const startDate = startDateInput.value ? new Date(startDateInput.value) : null;
+                const endDate = endDateInput.value ? new Date(endDateInput.value) : null;
+                if (!startDate || !endDate) {
+                    showAlert('Input Tanggal Tidak Lengkap', 'Harap isi tanggal mulai dan tanggal akhir.');
+                    return;
+                }
+                const adjustedEndDate = new Date(endDate);
+                adjustedEndDate.setDate(adjustedEndDate.getDate() + 1);
+
+                const summary = {};
+                records.forEach(r => {
+                    if (!r.clock_in_timestamp || !r.clock_out_timestamp) return;
+                    const recordDate = new Date(r.clock_in_timestamp * 1000);
+                    if (recordDate >= startDate && recordDate < adjustedEndDate) {
+                        const duration = (r.clock_out_timestamp - r.clock_in_timestamp) * 1000;
+                        const name = r.name;
+                        if (!summary[name]) summary[name] = 0;
+                        summary[name] += duration;
+                    }
+                });
+
+                const data = [['Nama', `Durasi (${startDate.toLocaleDateString('id-ID')} - ${endDate.toLocaleDateString('id-ID')})`]];
+                Object.keys(summary).sort().forEach(name => {
+                    data.push([name, formatDuration(summary[name])]);
+                });
+
+                const ws = XLSX.utils.aoa_to_sheet(data);
+                const wb = XLSX.utils.book_new();
                 XLSX.utils.book_append_sheet(wb, ws, "Akumulasi Karyawan");
-                
                 XLSX.writeFile(wb, `Laporan_Akumulasi_Karyawan_${startDate.getFullYear()}-${startDate.getMonth() + 1}-${startDate.getDate()}_sd_${endDate.getFullYear()}-${endDate.getMonth() + 1}-${endDate.getDate()}.xlsx`);
             }
-
-
-            // --- Helper Functions ---
-            function getRecords() {
-                return JSON.parse(localStorage.getItem(RECORDS_KEY)) || [];
-            }
             
-            // Fungsi untuk memformat durasi menjadi hh:mm:ss
+            // --- Helper Functions ---
             function formatDuration(ms) {
                 if (ms <= 0) return '00:00:00';
                 const totalSeconds = Math.floor(ms / 1000);
                 const hours = Math.floor(totalSeconds / 3600);
                 const minutes = Math.floor((totalSeconds % 3600) / 60);
                 const seconds = totalSeconds % 60;
-
                 const pad = (num) => num.toString().padStart(2, '0');
-
                 return `${pad(hours)}:${pad(minutes)}:${pad(seconds)}`;
+            }
+
+            // Fungsi untuk mengatur rentang tanggal awal
+            function setInitialDateRange() {
+                const today = new Date();
+                const oneMonthAgo = new Date();
+                oneMonthAgo.setMonth(today.getMonth() - 1);
+                
+                const formatDate = (date) => {
+                    const year = date.getFullYear();
+                    const month = String(date.getMonth() + 1).padStart(2, '0');
+                    const day = String(date.getDate()).padStart(2, '0');
+                    return `${year}-${month}-${day}`;
+                };
+                
+                startDateInput.value = formatDate(oneMonthAgo);
+                endDateInput.value = formatDate(today);
             }
         });
     </script>
