@@ -93,7 +93,7 @@
         </header>
 
         <main class="grid grid-cols-1 lg:grid-cols-5 gap-6">
-            <!-- Kolom Input & Ringkasan Akumulasi -->
+            <!-- Kolom Input & Ringkasan Akumulasi Total -->
             <div class="lg:col-span-2 flex flex-col gap-6">
                 <!-- Card Input Data -->
                 <div class="card p-6 rounded-lg">
@@ -148,26 +148,7 @@
 
             <!-- Kolom Riwayat & Akumulasi per Karyawan -->
             <div class="lg:col-span-3 flex flex-col gap-6">
-                <!-- Tabel Akumulasi per Karyawan -->
-                <div class="card p-6 rounded-lg">
-                    <h2 class="text-xl font-semibold mb-4 text-white">Akumulasi Per Karyawan</h2>
-                    <div class="overflow-x-auto table-container">
-                        <table class="w-full text-left text-sm">
-                            <thead class="border-b border-gray-600">
-                                <tr>
-                                    <th class="p-2">Nama</th>
-                                    <th class="p-2">Minggu Ini</th>
-                                    <th class="p-2">Bulan Ini</th>
-                                </tr>
-                            </thead>
-                            <tbody id="employeeSummaryTableBody">
-                                <!-- Data akumulasi per karyawan akan ditambahkan di sini -->
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-
-                <!-- Tabel Rekapitulasi Kehadiran -->
+                 <!-- Tabel Rekapitulasi Kehadiran -->
                 <div class="card p-6 rounded-lg">
                     <div class="flex justify-between items-center mb-4">
                         <h2 class="text-xl font-semibold text-white">Tabel Rekapitulasi Kehadiran</h2>
@@ -190,6 +171,25 @@
                             </thead>
                             <tbody id="historyTableBody">
                                 <!-- Data riwayat akan ditambahkan di sini -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+                
+                <!-- Tabel Akumulasi per Karyawan -->
+                <div class="card p-6 rounded-lg">
+                    <h2 class="text-xl font-semibold mb-4 text-white">Akumulasi Per Karyawan</h2>
+                    <div class="overflow-x-auto table-container">
+                        <table class="w-full text-left text-sm">
+                            <thead class="border-b border-gray-600">
+                                <tr>
+                                    <th class="p-2">Nama</th>
+                                    <th class="p-2">Minggu Ini</th>
+                                    <th class="p-2">Bulan Ini</th>
+                                </tr>
+                            </thead>
+                            <tbody id="employeeSummaryTableBody">
+                                <!-- Data akumulasi per karyawan akan ditambahkan di sini -->
                             </tbody>
                         </table>
                     </div>
