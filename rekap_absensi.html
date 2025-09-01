@@ -57,7 +57,8 @@
 </head>
 <body class="p-4 flex flex-col items-center min-h-screen">
     <div class="card p-6 rounded-xl shadow-md w-full max-w-2xl mb-6">
-        <h1 class="text-2xl md:text-3xl font-bold mb-4 text-center">Rekapitulasi Kehadiran Karyawan</h1>
+        <h1 class="text-2xl md:text-3xl font-bold mb-2 text-center">Rekapitulasi Kehadiran Karyawan</h1>
+        <p class="text-xs text-gray-500 mb-4 text-center">ID Pengguna Saat Ini: <span id="userIdDisplay" class="font-mono text-xs text-gray-400">Loading...</span></p>
         <p class="text-sm md:text-base text-gray-400 text-center mb-6">Kelola waktu masuk dan keluar Anda dengan mudah.</p>
 
         <div class="mb-6 space-y-4">
@@ -127,7 +128,6 @@
         const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
 
         let db, auth, userId;
-        let records = [];
         let unsubscribe;
 
         // --- DOM Elements ---
@@ -137,13 +137,14 @@
         const inBtn = document.getElementById('inBtn');
         const outBtn = document.getElementById('outBtn');
         const reportBody = document.getElementById('reportBody');
+        const userIdDisplay = document.getElementById('userIdDisplay');
         const modalContainer = document.getElementById('modalContainer');
         const modalTitle = document.getElementById('modalTitle');
         const modalMessage = document.getElementById('modalMessage');
         const modalActions = document.getElementById('modalActions');
 
         const SETTINGS_COLLECTION = "settings";
-        const RECORDS_COLLECTION = "Absensi Karyawan"; // Menggunakan nama koleksi yang disediakan oleh pengguna
+        const RECORDS_COLLECTION = "attendance_records"; // Menggunakan nama koleksi yang benar dari database pengguna
 
         // --- Firebase Initialization ---
         async function initFirebase() {
@@ -159,12 +160,13 @@
                 }
 
                 userId = auth.currentUser.uid;
+                userIdDisplay.textContent = userId;
                 
                 // Logging untuk debug
                 console.log("Firebase berhasil diinisialisasi.");
                 console.log("App ID:", appId);
                 console.log("User ID:", userId);
-                console.log("Menggunakan path koleksi:", `artifacts/${appId}/users/${userId}/${RECORDS_COLLECTION}`);
+                console.log("Menggunakan path koleksi:", RECORDS_COLLECTION);
 
                 await loadSettings();
                 listenToRecords();
@@ -250,68 +252,57 @@
             }
 
             if (!db || !userId) return;
-            const recordsCollectionRef = collection(db, `artifacts/${appId}/users/${userId}/${RECORDS_COLLECTION}`);
+            const recordsCollectionRef = collection(db, RECORDS_COLLECTION);
             
-            // onSnapshot akan mendengarkan perubahan secara real-time
+            // Mengambil semua dokumen di koleksi
             unsubscribe = onSnapshot(recordsCollectionRef, (snapshot) => {
-                const newRecords = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-                // Urutkan records berdasarkan timestamp secara menurun
-                records = newRecords.sort((a, b) => b.inTimestamp - a.inTimestamp);
-                renderReport();
+                const allRecords = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                const userRecords = allRecords.filter(record => record.username === userId || record.username === undefined);
+
+                // Mengelompokkan records berdasarkan tanggal
+                const groupedRecords = userRecords.reduce((acc, record) => {
+                    if (record.timestamp) {
+                        const recordDate = new Date(record.timestamp).toISOString().slice(0, 10);
+                        if (!acc[recordDate]) {
+                            acc[recordDate] = {};
+                        }
+                        // Menangani data Masuk & Keluar
+                        if (record.type === 'Masuk' && !acc[recordDate].in) {
+                            acc[recordDate].in = record;
+                        } else if (record.type === 'Keluar' && !acc[recordDate].out) {
+                            acc[recordDate].out = record;
+                        }
+                    }
+                    return acc;
+                }, {});
+
+                renderReport(groupedRecords);
             }, (error) => {
                 console.error("Kesalahan saat mendengarkan records:", error);
                 showModal("Kesalahan Koneksi", "Gagal memperbarui data real-time. Periksa koneksi internet Anda.");
             });
         }
 
-        async function addOrUpdateRecord(type) {
+        async function addRecord(type) {
             if (!db || !userId) return;
 
-            const today = new Date().toISOString().slice(0, 10);
-            const recordsCollectionRef = collection(db, `artifacts/${appId}/users/${userId}/${RECORDS_COLLECTION}`);
-            const q = query(recordsCollectionRef, where("date", "==", today));
-
+            const recordsCollectionRef = collection(db, RECORDS_COLLECTION);
+            
             try {
-                const querySnapshot = await getDocs(q);
-                let currentRecord;
-                let recordId;
-
-                if (!querySnapshot.empty) {
-                    currentRecord = querySnapshot.docs[0].data();
-                    recordId = querySnapshot.docs[0].id;
-                }
-                
-                if (type === 'in') {
-                    if (currentRecord && currentRecord.inTimestamp) {
-                        showModal("Perhatian", "Anda sudah mencatat waktu masuk hari ini.");
-                        return;
+                const newRecord = {
+                    timestamp: Date.now(),
+                    type: type,
+                    username: userId,
+                    // Tambahkan data lokasi jika diperlukan
+                    location: {
+                        latitude: -7.1897427,
+                        longitude: 113.4785018
                     }
-                    const newRecord = {
-                        date: today,
-                        inTimestamp: Date.now(),
-                        outTimestamp: null,
-                    };
-                    await addDoc(recordsCollectionRef, newRecord);
-                    showModal("Masuk Berhasil", "Waktu masuk Anda telah dicatat.");
-                } else if (type === 'out') {
-                    if (!currentRecord) {
-                        showModal("Perhatian", "Harap catat waktu masuk Anda terlebih dahulu.");
-                        return;
-                    }
-                    if (currentRecord.outTimestamp) {
-                        showModal("Perhatian", "Anda sudah mencatat waktu keluar hari ini.");
-                        return;
-                    }
-                    const updatedRecord = {
-                        ...currentRecord,
-                        outTimestamp: Date.now()
-                    };
-                    const recordDocRef = doc(db, `artifacts/${appId}/users/${userId}/${RECORDS_COLLECTION}`, recordId);
-                    await setDoc(recordDocRef, updatedRecord);
-                    showModal("Keluar Berhasil", "Waktu keluar Anda telah dicatat.");
-                }
+                };
+                await addDoc(recordsCollectionRef, newRecord);
+                showModal("Berhasil", `Waktu ${type} Anda telah dicatat.`);
             } catch (error) {
-                console.error(`Kesalahan saat ${type} catatan:', error);
+                console.error(`Kesalahan saat mencatat waktu ${type}:`, error);
                 showModal("Kesalahan", `Gagal mencatat waktu ${type}.`);
             }
         }
@@ -319,7 +310,7 @@
         async function deleteRecord(recordId) {
             if (!db || !userId) return;
             try {
-                const recordDocRef = doc(db, `artifacts/${appId}/users/${userId}/${RECORDS_COLLECTION}`, recordId);
+                const recordDocRef = doc(db, RECORDS_COLLECTION, recordId);
                 await deleteDoc(recordDocRef);
                 showModal("Berhasil", "Catatan berhasil dihapus.");
             } catch (error) {
@@ -329,9 +320,11 @@
         }
 
         // --- UI & Reporting ---
-        function renderReport() {
+        function renderReport(groupedRecords) {
             reportBody.innerHTML = '';
-            if (records.length === 0) {
+            const recordDates = Object.keys(groupedRecords).sort((a, b) => new Date(b) - new Date(a));
+
+            if (recordDates.length === 0) {
                 reportBody.innerHTML = '<tr><td colspan="6" class="p-4 text-center text-gray-400">Belum ada catatan kehadiran.</td></tr>';
                 return;
             }
@@ -339,30 +332,31 @@
             const standardIn = standardInInput.value;
             const standardOut = standardOutInput.value;
 
-            records.forEach(record => {
+            recordDates.forEach(date => {
+                const record = groupedRecords[date];
                 const row = document.createElement('tr');
                 row.className = 'hover:bg-gray-800 transition-colors duration-200';
 
-                const inTime = record.inTimestamp ? new Date(record.inTimestamp).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) : '-';
-                const outTime = record.outTimestamp ? new Date(record.outTimestamp).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) : '-';
-                const date = new Date(record.inTimestamp).toLocaleDateString('id-ID', { year: 'numeric', month: 'short', day: 'numeric' });
+                const inTime = record.in ? new Date(record.in.timestamp).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) : '-';
+                const outTime = record.out ? new Date(record.out.timestamp).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) : '-';
+                const displayDate = new Date(date).toLocaleDateString('id-ID', { year: 'numeric', month: 'short', day: 'numeric' });
                 
                 let duration = 'N/A';
                 let statusClass = '';
                 let statusText = 'Tidak Lengkap';
 
-                if (record.inTimestamp && record.outTimestamp) {
-                    const msDuration = record.outTimestamp - record.inTimestamp;
+                if (record.in && record.out) {
+                    const msDuration = record.out.timestamp - record.in.timestamp;
                     duration = formatDuration(msDuration);
                     
                     const [standardInHours, standardInMinutes] = standardIn.split(':').map(Number);
                     const [standardOutHours, standardOutMinutes] = standardOut.split(':').map(Number);
                     
-                    const inDate = new Date(record.inTimestamp);
+                    const inDate = new Date(record.in.timestamp);
                     const inHour = inDate.getHours();
                     const inMinute = inDate.getMinutes();
 
-                    const outDate = new Date(record.outTimestamp);
+                    const outDate = new Date(record.out.timestamp);
                     const outHour = outDate.getHours();
                     const outMinute = outDate.getMinutes();
                     
@@ -389,13 +383,14 @@
                 }
 
                 row.innerHTML = `
-                    <td class="px-4 py-2">${date}</td>
+                    <td class="px-4 py-2">${displayDate}</td>
                     <td class="px-4 py-2">${inTime}</td>
                     <td class="px-4 py-2">${outTime}</td>
                     <td class="px-4 py-2">${duration}</td>
                     <td class="px-4 py-2 ${statusClass} font-semibold">${statusText}</td>
                     <td class="px-4 py-2">
-                        <button class="delete-btn btn-secondary px-3 py-1 text-sm rounded-lg" data-id="${record.id}">Hapus</button>
+                        ${record.in ? `<button class="delete-btn btn-secondary px-3 py-1 text-sm rounded-lg" data-id="${record.in.id}" data-date="${date}">Hapus Masuk</button>` : ''}
+                        ${record.out ? `<button class="delete-btn btn-secondary px-3 py-1 text-sm rounded-lg" data-id="${record.out.id}" data-date="${date}">Hapus Keluar</button>` : ''}
                     </td>
                 `;
                 reportBody.appendChild(row);
@@ -422,15 +417,16 @@
         });
 
         saveSettingsBtn.addEventListener('click', saveSettings);
-        inBtn.addEventListener('click', () => addOrUpdateRecord('in'));
-        outBtn.addEventListener('click', () => addOrUpdateRecord('out'));
+        inBtn.addEventListener('click', () => addRecord('Masuk'));
+        outBtn.addEventListener('click', () => addRecord('Keluar'));
 
         reportBody.addEventListener('click', (e) => {
             if (e.target.classList.contains('delete-btn')) {
                 const recordId = e.target.getAttribute('data-id');
+                const date = e.target.getAttribute('data-date');
                 showModal(
                     "Konfirmasi Hapus",
-                    "Apakah Anda yakin ingin menghapus catatan ini?",
+                    `Apakah Anda yakin ingin menghapus catatan pada ${date}?`,
                     [
                         {
                             text: "Ya, Hapus",
@@ -446,7 +442,6 @@
                 );
             }
         });
-
     </script>
 </body>
 </html>
