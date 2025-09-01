@@ -53,6 +53,12 @@
         .table-header {
             background-color: #21262d;
         }
+        .modal-btn-confirm {
+            background-color: #da3633;
+        }
+        .modal-btn-confirm:hover {
+            background-color: #f85149;
+        }
     </style>
 </head>
 <body class="p-4 flex flex-col items-center min-h-screen">
@@ -272,10 +278,11 @@
             }
             const recordsCollectionRef = collection(db, RECORDS_COLLECTION);
             
+            const q = query(recordsCollectionRef, where("username", "==", userId));
+
             // Mengambil semua dokumen di koleksi
-            unsubscribe = onSnapshot(recordsCollectionRef, (snapshot) => {
-                const allRecords = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-                const userRecords = allRecords.filter(record => record.username === userId);
+            unsubscribe = onSnapshot(q, (snapshot) => {
+                const userRecords = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
 
                 // Mengelompokkan records berdasarkan tanggal
                 const groupedRecords = userRecords.reduce((acc, record) => {
@@ -285,9 +292,9 @@
                             acc[recordDate] = {};
                         }
                         // Menangani data Masuk & Keluar
-                        if (record.type === 'Masuk' && !acc[recordDate].in) {
+                        if (record.type === 'Masuk') {
                             acc[recordDate].in = record;
-                        } else if (record.type === 'Keluar' && !acc[recordDate].out) {
+                        } else if (record.type === 'Keluar') {
                             acc[recordDate].out = record;
                         }
                     }
@@ -314,11 +321,6 @@
                     timestamp: Date.now(),
                     type: type,
                     username: userId,
-                    // Tambahkan data lokasi jika diperlukan
-                    location: {
-                        latitude: -7.1897427,
-                        longitude: 113.4785018
-                    }
                 };
                 await addDoc(recordsCollectionRef, newRecord);
                 showModal("Berhasil", `Waktu ${type} Anda telah dicatat.`);
@@ -413,8 +415,8 @@
                     <td class="px-4 py-2">${duration}</td>
                     <td class="px-4 py-2 ${statusClass} font-semibold">${statusText}</td>
                     <td class="px-4 py-2">
-                        ${record.in ? `<button class="delete-btn btn-secondary px-3 py-1 text-sm rounded-lg" data-id="${record.in.id}" data-date="${date}">Hapus Masuk</button>` : ''}
-                        ${record.out ? `<button class="delete-btn btn-secondary px-3 py-1 text-sm rounded-lg" data-id="${record.out.id}" data-date="${date}">Hapus Keluar</button>` : ''}
+                        ${record.in ? `<button class="delete-btn btn-secondary px-3 py-1 text-sm rounded-lg" data-id="${record.in.id}" data-date="${displayDate}" data-type="Masuk">Hapus Masuk</button>` : ''}
+                        ${record.out ? `<button class="delete-btn btn-secondary px-3 py-1 text-sm rounded-lg" data-id="${record.out.id}" data-date="${displayDate}" data-type="Keluar">Hapus Keluar</button>` : ''}
                     </td>
                 `;
                 reportBody.appendChild(row);
@@ -448,13 +450,14 @@
             if (e.target.classList.contains('delete-btn')) {
                 const recordId = e.target.getAttribute('data-id');
                 const date = e.target.getAttribute('data-date');
+                const type = e.target.getAttribute('data-type');
                 showModal(
                     "Konfirmasi Hapus",
-                    `Apakah Anda yakin ingin menghapus catatan pada ${date}?`,
+                    `Apakah Anda yakin ingin menghapus catatan waktu ${type} pada ${date}?`,
                     [
                         {
                             text: "Ya, Hapus",
-                            className: "btn-primary",
+                            className: "btn-primary modal-btn-confirm",
                             handler: () => deleteRecord(recordId)
                         },
                         {
