@@ -218,13 +218,15 @@
                     userDisplay.textContent = `ID Pengguna Saat Ini: ${userId}`;
                     userDisplay.classList.remove('hidden');
                     
-                    // Tambahkan listener real-time untuk data kehadiran
-                    const q = query(collection(db, `/artifacts/${appId}/public/data/attendance_records`), where("userId", "==", userId));
+                    // Tambahkan listener real-time untuk semua data kehadiran
+                    // Kode ini akan membaca data yang masuk, baik dari Anda maupun dari pengguna lain
+                    const q = query(collection(db, `/artifacts/${appId}/public/data/attendance_records`));
                     onSnapshot(q, (snapshot) => {
                         const records = [];
                         snapshot.forEach(doc => {
                             records.push({ id: doc.id, ...doc.data() });
                         });
+                        console.log('Data baru terdeteksi:', records);
                         renderHistoryTable(records);
                     }, (error) => {
                         console.error("Kesalahan mendengarkan data Firestore:", error);
