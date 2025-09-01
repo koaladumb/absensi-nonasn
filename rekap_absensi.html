@@ -124,11 +124,23 @@
 
         // Global variables for Firebase
         const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
-        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
         const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
 
-        let db, auth, userId;
+        let db = null;
+        let auth = null;
+        let userId = null;
         let unsubscribe;
+
+        // Firebase configuration from the user
+        const firebaseConfig = {
+            apiKey: "AIzaSyDGp54rAM9oTndNG2Gb5WzuRCsos31L7jA",
+            authDomain: "absensi-karyawan-dfe06.firebaseapp.com",
+            projectId: "absensi-karyawan-dfe06",
+            storageBucket: "absensi-karyawan-dfe06.firebasestorage.app",
+            messagingSenderId: "491057180070",
+            appId: "1:491057180070:web:0ce651224f84225c1eb367",
+            measurementId: "G-XX3S6X37FN"
+        };
 
         // --- DOM Elements ---
         const standardInInput = document.getElementById('standardIn');
@@ -144,7 +156,7 @@
         const modalActions = document.getElementById('modalActions');
 
         const SETTINGS_COLLECTION = "settings";
-        const RECORDS_COLLECTION = "attendance_records"; // Menggunakan nama koleksi yang benar dari database pengguna
+        const RECORDS_COLLECTION = "attendance_records";
 
         // --- Firebase Initialization ---
         async function initFirebase() {
@@ -229,7 +241,10 @@
         }
 
         async function saveSettings() {
-            if (!db || !userId) return;
+            if (!db || !userId) {
+                showModal("Kesalahan", "Firebase belum terinisialisasi. Silakan refresh halaman.");
+                return;
+            }
             const settingsDocRef = doc(db, `artifacts/${appId}/users/${userId}/${SETTINGS_COLLECTION}`, 'user_settings');
             
             const settings = {
@@ -251,13 +266,16 @@
                 unsubscribe();
             }
 
-            if (!db || !userId) return;
+            if (!db || !userId) {
+                console.error("Firebase atau User ID tidak tersedia. Tidak dapat mendengarkan data.");
+                return;
+            }
             const recordsCollectionRef = collection(db, RECORDS_COLLECTION);
             
             // Mengambil semua dokumen di koleksi
             unsubscribe = onSnapshot(recordsCollectionRef, (snapshot) => {
                 const allRecords = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-                const userRecords = allRecords.filter(record => record.username === userId || record.username === undefined);
+                const userRecords = allRecords.filter(record => record.username === userId);
 
                 // Mengelompokkan records berdasarkan tanggal
                 const groupedRecords = userRecords.reduce((acc, record) => {
@@ -284,7 +302,10 @@
         }
 
         async function addRecord(type) {
-            if (!db || !userId) return;
+            if (!db || !userId) {
+                showModal("Kesalahan", "Firebase belum terinisialisasi. Silakan refresh halaman.");
+                return;
+            }
 
             const recordsCollectionRef = collection(db, RECORDS_COLLECTION);
             
@@ -308,7 +329,10 @@
         }
         
         async function deleteRecord(recordId) {
-            if (!db || !userId) return;
+            if (!db || !userId) {
+                showModal("Kesalahan", "Firebase belum terinisialisasi. Silakan refresh halaman.");
+                return;
+            }
             try {
                 const recordDocRef = doc(db, RECORDS_COLLECTION, recordId);
                 await deleteDoc(recordDocRef);
