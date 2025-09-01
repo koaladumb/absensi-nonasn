@@ -276,11 +276,11 @@
                 console.error("Firebase atau User ID tidak tersedia. Tidak dapat mendengarkan data.");
                 return;
             }
-            const recordsCollectionRef = collection(db, RECORDS_COLLECTION);
+            // Mengambil semua dokumen di koleksi pribadi pengguna
+            const userRecordsCollectionRef = collection(db, `artifacts/${appId}/users/${userId}/${RECORDS_COLLECTION}`);
             
-            const q = query(recordsCollectionRef, where("username", "==", userId));
+            const q = query(userRecordsCollectionRef);
 
-            // Mengambil semua dokumen di koleksi
             unsubscribe = onSnapshot(q, (snapshot) => {
                 const userRecords = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
 
@@ -314,7 +314,7 @@
                 return;
             }
 
-            const recordsCollectionRef = collection(db, RECORDS_COLLECTION);
+            const userRecordsCollectionRef = collection(db, `artifacts/${appId}/users/${userId}/${RECORDS_COLLECTION}`);
             
             try {
                 const newRecord = {
@@ -322,7 +322,7 @@
                     type: type,
                     username: userId,
                 };
-                await addDoc(recordsCollectionRef, newRecord);
+                await addDoc(userRecordsCollectionRef, newRecord);
                 showModal("Berhasil", `Waktu ${type} Anda telah dicatat.`);
             } catch (error) {
                 console.error(`Kesalahan saat mencatat waktu ${type}:`, error);
@@ -336,7 +336,7 @@
                 return;
             }
             try {
-                const recordDocRef = doc(db, RECORDS_COLLECTION, recordId);
+                const recordDocRef = doc(db, `artifacts/${appId}/users/${userId}/${RECORDS_COLLECTION}`, recordId);
                 await deleteDoc(recordDocRef);
                 showModal("Berhasil", "Catatan berhasil dihapus.");
             } catch (error) {
