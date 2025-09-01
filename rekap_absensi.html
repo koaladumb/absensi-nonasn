@@ -177,14 +177,9 @@
         const modalActions = document.getElementById('modalActions');
 
         // Konfigurasi Firebase
-        const firebaseConfig = {
-            apiKey: "AIzaSyCFIK_p9c7zV_2Z_b-xQk9_b-xQk9_b-xQk9",
-            authDomain: "absensi-karyawan-d8fe06.firebaseapp.com",
-            projectId: "absensi-karyawan-d8fe06",
-            storageBucket: "absensi-karyawan-d8fe06.appspot.com",
-            messagingSenderId: "1056589332560",
-            appId: "1:1056589332560:web:1a91e3e7f91a5e1e1a5e1e"
-        };
+        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
         
         let db;
         let auth;
@@ -214,7 +209,7 @@
                 userDisplay.classList.remove('hidden');
                 
                 // Tambahkan listener real-time untuk data kehadiran
-                const q = query(collection(db, `/artifacts/default-app-id/public/data/attendance_records`), where("userId", "==", userId));
+                const q = query(collection(db, `/artifacts/${appId}/public/data/attendance_records`), where("userId", "==", userId));
                 onSnapshot(q, (snapshot) => {
                     const records = [];
                     snapshot.forEach(doc => {
@@ -228,9 +223,13 @@
 
             } else {
                  try {
-                    await signInAnonymously(auth);
+                    if (initialAuthToken) {
+                        await signInWithCustomToken(auth, initialAuthToken);
+                    } else {
+                        await signInAnonymously(auth);
+                    }
                 } catch (error) {
-                    console.error("Gagal masuk secara anonim:", error);
+                    console.error("Gagal masuk:", error);
                     showAlert('Kesalahan Otentikasi', 'Gagal masuk. Silakan periksa koneksi internet Anda atau coba lagi nanti.');
                 }
             }
@@ -287,11 +286,11 @@
 
             try {
                 if (docId) {
-                    const docRef = doc(db, `/artifacts/default-app-id/public/data/attendance_records`, docId);
+                    const docRef = doc(db, `/artifacts/${appId}/public/data/attendance_records`, docId);
                     await updateDoc(docRef, record);
                     showAlert('Berhasil', 'Data berhasil diperbarui!');
                 } else {
-                    await addDoc(collection(db, `/artifacts/default-app-id/public/data/attendance_records`), record);
+                    await addDoc(collection(db, `/artifacts/${appId}/public/data/attendance_records`), record);
                     showAlert('Berhasil', 'Data berhasil disimpan!');
                 }
                 
@@ -320,7 +319,7 @@
         
         async function deleteRecord(docId) {
             try {
-                await deleteDoc(doc(db, `/artifacts/default-app-id/public/data/attendance_records`, docId));
+                await deleteDoc(doc(db, `/artifacts/${appId}/public/data/attendance_records`, docId));
                 showAlert('Berhasil', 'Data berhasil dihapus!');
             } catch (error) {
                 showAlert('Kesalahan Hapus', 'Gagal menghapus data. Detail: ' + error.message);
@@ -330,7 +329,7 @@
 
         async function showEditModal(docId) {
             try {
-                const docRef = doc(db, `/artifacts/default-app-id/public/data/attendance_records`, docId);
+                const docRef = doc(db, `/artifacts/${appId}/public/data/attendance_records`, docId);
                 const docSnap = await getDoc(docRef);
                 if (docSnap.exists()) {
                     const data = docSnap.data();
@@ -364,7 +363,7 @@
                             clockInTimestamp: parseInt(document.getElementById('modalClockIn').value),
                             clockOutTimestamp: parseInt(document.getElementById('modalClockOut').value),
                         };
-                        const docRef = doc(db, `/artifacts/default-app-id/public/data/attendance_records`, docId);
+                        const docRef = doc(db, `/artifacts/${appId}/public/data/attendance_records`, docId);
                         await updateDoc(docRef, updatedRecord);
                         modal.classList.add('hidden');
                         showAlert('Berhasil', 'Data berhasil diperbarui!');
