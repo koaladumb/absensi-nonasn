@@ -83,6 +83,9 @@
             background-color: #161b22;
             z-index: 10;
         }
+        input[type="date"]::-webkit-calendar-picker-indicator {
+            filter: invert(1);
+        }
     </style>
 </head>
 <body class="p-4 md:p-8">
@@ -152,7 +155,7 @@
                 <div class="card p-6 rounded-lg">
                     <div class="flex justify-between items-center mb-4">
                         <h2 class="text-xl font-semibold text-white">Tabel Rekapitulasi Kehadiran</h2>
-                        <button id="exportHistoryXlsxBtn" class="btn-primary font-semibold py-2 px-4 rounded-md">Ekspor XLSX</button>
+                        <button id="exportHistoryBtn" class="btn-primary font-semibold py-2 px-4 rounded-md">Ekspor XLSX</button>
                     </div>
                     <div class="overflow-x-auto table-container">
                         <table class="w-full text-left text-sm">
@@ -180,15 +183,29 @@
                 <div class="card p-6 rounded-lg">
                     <div class="flex justify-between items-center mb-4">
                         <h2 class="text-xl font-semibold text-white">Akumulasi Per Karyawan</h2>
-                        <button id="exportSummaryXlsxBtn" class="btn-primary font-semibold py-2 px-4 rounded-md">Ekspor XLSX</button>
+                        <button id="exportSummaryBtn" class="btn-primary font-semibold py-2 px-4 rounded-md">Ekspor XLSX</button>
+                    </div>
+                    <div class="space-y-4 mb-4">
+                        <div class="flex items-center space-x-4">
+                            <div>
+                                <label for="startDate" class="block text-sm font-medium mb-1">Tanggal Mulai</label>
+                                <input type="date" id="startDate" class="input-field p-2 rounded-md">
+                            </div>
+                            <div>
+                                <label for="endDate" class="block text-sm font-medium mb-1">Tanggal Akhir</label>
+                                <input type="date" id="endDate" class="input-field p-2 rounded-md">
+                            </div>
+                            <div class="self-end pb-[2px]">
+                                <button id="showSummaryBtn" class="btn-secondary font-semibold py-2 px-4 rounded-md">Tampilkan</button>
+                            </div>
+                        </div>
                     </div>
                     <div class="overflow-x-auto table-container">
                         <table class="w-full text-left text-sm">
                             <thead class="border-b border-gray-600">
                                 <tr>
                                     <th class="p-2">Nama</th>
-                                    <th class="p-2">Minggu Ini</th>
-                                    <th class="p-2">Bulan Ini</th>
+                                    <th id="summaryDurationHeader" class="p-2">Durasi Kerja</th>
                                 </tr>
                             </thead>
                             <tbody id="employeeSummaryTableBody">
@@ -238,14 +255,21 @@
             const backupDataBtn = document.getElementById('backupDataBtn');
             const restoreFile = document.getElementById('restoreFile');
             const deleteAllDataBtn = document.getElementById('deleteAllDataBtn');
-            const exportHistoryXlsxBtn = document.getElementById('exportHistoryXlsxBtn');
-            const exportSummaryXlsxBtn = document.getElementById('exportSummaryXlsxBtn');
+            const exportHistoryBtn = document.getElementById('exportHistoryBtn');
+            const exportSummaryBtn = document.getElementById('exportSummaryBtn');
+
+            // Elemen Tanggal Akumulasi
+            const startDateInput = document.getElementById('startDate');
+            const endDateInput = document.getElementById('endDate');
+            const showSummaryBtn = document.getElementById('showSummaryBtn');
+            const summaryDurationHeader = document.getElementById('summaryDurationHeader');
 
             // Kunci Local Storage
             const RECORDS_KEY = 'attendanceRecords_ts';
 
             // Inisialisasi Aplikasi
             calculateAndRenderAll();
+            setInitialDateRange();
 
             // Event Listeners
             clockInTimestampInput.addEventListener('input', (e) => handleTimestampInput(e, clockInPreview));
@@ -257,10 +281,28 @@
             backupDataBtn.addEventListener('click', handleBackupData);
             restoreFile.addEventListener('change', handleRestoreData);
             deleteAllDataBtn.addEventListener('click', handleDeleteAllData);
-            exportHistoryXlsxBtn.addEventListener('click', handleExportHistoryXlsx);
-            exportSummaryXlsxBtn.addEventListener('click', handleExportSummaryXlsx);
+            exportHistoryBtn.addEventListener('click', handleExportHistoryXlsx);
+            exportSummaryBtn.addEventListener('click', handleExportSummaryXlsx);
+            showSummaryBtn.addEventListener('click', handleShowSummary);
 
-
+            // Fungsi untuk menetapkan rentang tanggal awal (mis. 1 bulan terakhir)
+            function setInitialDateRange() {
+                const today = new Date();
+                const oneMonthAgo = new Date();
+                oneMonthAgo.setMonth(today.getMonth() - 1);
+                
+                const formatDate = (date) => {
+                    const year = date.getFullYear();
+                    const month = String(date.getMonth() + 1).padStart(2, '0');
+                    const day = String(date.getDate()).padStart(2, '0');
+                    return `${year}-${month}-${day}`;
+                };
+                
+                startDateInput.value = formatDate(oneMonthAgo);
+                endDateInput.value = formatDate(today);
+                handleShowSummary(); // Tampilkan data awal
+            }
+            
             // Fungsi untuk mengkonversi timestamp ke format tanggal & waktu saat user mengetik
             function handleTimestampInput(event, displayElement) {
                 const timestamp = parseInt(event.target.value);
@@ -365,7 +407,7 @@
             function calculateAndRenderAll() {
                 renderHistoryTable();
                 renderAggregateSummaries();
-                renderEmployeeSummary();
+                // renderEmployeeSummary(); // This is now called via handleShowSummary
             }
             
             function renderHistoryTable() {
@@ -466,28 +508,48 @@
                 weeklyHoursEl.textContent = formatDuration(weeklyMs);
                 monthlyHoursEl.textContent = formatDuration(monthlyMs);
             }
+            
+            // Fungsi baru untuk menampilkan ringkasan berdasarkan rentang tanggal
+            function handleShowSummary() {
+                const startDate = startDateInput.value ? new Date(startDateInput.value) : null;
+                const endDate = endDateInput.value ? new Date(endDateInput.value) : null;
+
+                if (!startDate || !endDate) {
+                    showAlert('Input Tanggal Tidak Lengkap', 'Harap isi tanggal mulai dan tanggal akhir.');
+                    return;
+                }
+                
+                if (startDate > endDate) {
+                    showAlert('Input Tanggal Tidak Valid', 'Tanggal mulai tidak boleh lebih besar dari tanggal akhir.');
+                    return;
+                }
+                
+                // Tambahkan 1 hari ke tanggal akhir agar inklusif
+                const adjustedEndDate = new Date(endDate);
+                adjustedEndDate.setDate(adjustedEndDate.getDate() + 1);
+
+                renderEmployeeSummary(startDate, adjustedEndDate);
+            }
 
             // Fungsi untuk merender akumulasi per karyawan
-            function renderEmployeeSummary() {
+            function renderEmployeeSummary(startDate, endDate) {
                 const records = getRecords();
                 const summary = {};
-                const today = new Date();
-                const startOfWeek = new Date(today.getFullYear(), today.getMonth(), today.getDate() - today.getDay());
+                
+                // Perbarui judul kolom
+                summaryDurationHeader.textContent = `Durasi (${startDate.toLocaleDateString('id-ID')} - ${endDate.toLocaleDateString('id-ID')})`;
                 
                 records.forEach(r => {
                     if (!r.clockInTimestamp || !r.clockOutTimestamp) return;
-                    const duration = (r.clockOutTimestamp - r.clockInTimestamp) * 1000;
                     const recordDate = new Date(r.clockInTimestamp * 1000);
 
-                    if (!summary[r.name]) {
-                        summary[r.name] = { weeklyMs: 0, monthlyMs: 0 };
-                    }
-                    
-                    if (recordDate >= startOfWeek) {
-                        summary[r.name].weeklyMs += duration;
-                    }
-                    if (recordDate.getMonth() === today.getMonth() && recordDate.getFullYear() === today.getFullYear()) {
-                        summary[r.name].monthlyMs += duration;
+                    if (recordDate >= startDate && recordDate < endDate) {
+                        const duration = (r.clockOutTimestamp - r.clockInTimestamp) * 1000;
+                        const name = r.name;
+                        if (!summary[name]) {
+                            summary[name] = 0;
+                        }
+                        summary[name] += duration;
                     }
                 });
 
@@ -495,7 +557,7 @@
                 const sortedNames = Object.keys(summary).sort();
 
                 if (sortedNames.length === 0) {
-                     employeeSummaryTableBody.innerHTML = `<tr><td colspan="3" class="text-center p-4 text-gray-500">Belum ada data akumulasi per karyawan.</td></tr>`;
+                     employeeSummaryTableBody.innerHTML = `<tr><td colspan="2" class="text-center p-4 text-gray-500">Belum ada data akumulasi di rentang tanggal ini.</td></tr>`;
                      return;
                 }
 
@@ -505,8 +567,7 @@
                     row.className = 'border-b border-gray-700 hover:bg-gray-800';
                     row.innerHTML = `
                         <td class="p-2 font-semibold">${name}</td>
-                        <td class="p-2">${formatDuration(data.weeklyMs)}</td>
-                        <td class="p-2">${formatDuration(data.monthlyMs)}</td>
+                        <td class="p-2">${formatDuration(data)}</td>
                     `;
                     employeeSummaryTableBody.appendChild(row);
                 });
@@ -583,6 +644,7 @@
                                 localStorage.setItem(RECORDS_KEY, JSON.stringify(restoredData.records));
                                 showAlert('Berhasil', 'Data berhasil dipulihkan!');
                                 calculateAndRenderAll();
+                                handleShowSummary(); // Tampilkan data akumulasi yang baru
                             });
                         } else {
                             showAlert('Gagal', 'File JSON tidak valid. Harap unggah file backup yang benar.');
@@ -599,6 +661,7 @@
                     localStorage.removeItem(RECORDS_KEY);
                     showAlert('Berhasil', 'Semua data telah dihapus.');
                     calculateAndRenderAll();
+                    handleShowSummary(); // Perbarui tabel ringkasan
                 });
             }
 
@@ -642,41 +705,45 @@
             
             // --- NEW: Function to export Summary Table to XLSX ---
             function handleExportSummaryXlsx() {
+                const startDate = startDateInput.value ? new Date(startDateInput.value) : null;
+                const endDate = endDateInput.value ? new Date(endDateInput.value) : null;
+                
+                if (!startDate || !endDate || startDate > endDate) {
+                    showAlert('Kesalahan Ekspor', 'Harap isi rentang tanggal yang valid sebelum mengekspor.');
+                    return;
+                }
+
                 const records = getRecords();
                 const summary = {};
-                const today = new Date();
-                const startOfWeek = new Date(today.getFullYear(), today.getMonth(), today.getDate() - today.getDay());
+                
+                const adjustedEndDate = new Date(endDate);
+                adjustedEndDate.setDate(adjustedEndDate.getDate() + 1);
                 
                 records.forEach(r => {
                     if (!r.clockInTimestamp || !r.clockOutTimestamp) return;
-                    const duration = (r.clockOutTimestamp - r.clockInTimestamp) * 1000;
                     const recordDate = new Date(r.clockInTimestamp * 1000);
-                    
-                    const name = r.name;
-                    if (!summary[name]) {
-                        summary[name] = { weeklyMs: 0, monthlyMs: 0 };
-                    }
-                    
-                    if (recordDate >= startOfWeek) {
-                        summary[name].weeklyMs += duration;
-                    }
-                    if (recordDate.getMonth() === today.getMonth() && recordDate.getFullYear() === today.getFullYear()) {
-                        summary[name].monthlyMs += duration;
+
+                    if (recordDate >= startDate && recordDate < adjustedEndDate) {
+                        const duration = (r.clockOutTimestamp - r.clockInTimestamp) * 1000;
+                        const name = r.name;
+                        if (!summary[name]) {
+                            summary[name] = 0;
+                        }
+                        summary[name] += duration;
                     }
                 });
 
                 const sortedNames = Object.keys(summary).sort();
                 if (sortedNames.length === 0) {
-                    showAlert('Tidak Ada Data', 'Tidak ada data akumulasi per karyawan untuk diekspor.');
+                    showAlert('Tidak Ada Data', 'Tidak ada data akumulasi per karyawan untuk diekspor dalam rentang tanggal ini.');
                     return;
                 }
                 
-                const data = [['Nama Karyawan', 'Total Jam Kerja Minggu Ini', 'Total Jam Kerja Bulan Ini']];
+                const data = [['Nama Karyawan', `Durasi Kerja (${startDate.toLocaleDateString('id-ID')} - ${endDate.toLocaleDateString('id-ID')})`]];
                 sortedNames.forEach(name => {
                     data.push([
                         name,
-                        formatDuration(summary[name].weeklyMs),
-                        formatDuration(summary[name].monthlyMs)
+                        formatDuration(summary[name])
                     ]);
                 });
 
@@ -684,7 +751,7 @@
                 const wb = XLSX.utils.book_new();
                 XLSX.utils.book_append_sheet(wb, ws, "Akumulasi Karyawan");
                 
-                XLSX.writeFile(wb, `Laporan_Akumulasi_Karyawan_${new Date().getFullYear()}-${new Date().getMonth() + 1}-${new Date().getDate()}.xlsx`);
+                XLSX.writeFile(wb, `Laporan_Akumulasi_Karyawan_${startDate.getFullYear()}-${startDate.getMonth() + 1}-${startDate.getDate()}_sd_${endDate.getFullYear()}-${endDate.getMonth() + 1}-${endDate.getDate()}.xlsx`);
             }
 
 
