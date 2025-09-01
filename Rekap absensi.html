@@ -1,0 +1,397 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Rekapitulasi Kehadiran Karyawan (Timestamp)</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #0d1117;
+            color: #c9d1d9;
+        }
+        .card {
+            background-color: #161b22;
+            border: 1px solid #30363d;
+        }
+        .input-field {
+            background-color: #0d1117;
+            border: 1px solid #30363d;
+            color: #c9d1d9;
+        }
+        .input-field:focus {
+            outline: none;
+            border-color: #58a6ff;
+            box-shadow: 0 0 0 3px rgba(88, 166, 255, 0.2);
+        }
+        .btn-primary {
+            background-color: #238636;
+            color: white;
+            border: 1px solid rgba(240, 246, 252, 0.1);
+            transition: background-color 0.2s;
+        }
+        .btn-primary:hover {
+            background-color: #2ea043;
+        }
+        .btn-secondary {
+            background-color: #21262d;
+            border: 1px solid #30363d;
+            transition: background-color 0.2s, border-color 0.2s;
+        }
+        .btn-secondary:hover {
+            background-color: #30363d;
+            border-color: #8b949e;
+        }
+        .btn-danger {
+            background-color: transparent;
+            color: #f85149;
+            border: 1px solid #30363d;
+            transition: all 0.2s;
+        }
+        .btn-danger:hover {
+            background-color: #f85149;
+            color: white;
+            border-color: #f85149;
+        }
+        .timestamp-preview {
+            font-size: 0.8rem;
+            color: #8b949e;
+            height: 1.2rem;
+            margin-top: 4px;
+        }
+    </style>
+</head>
+<body class="p-4 md:p-8">
+    <div class="max-w-7xl mx-auto">
+        <header class="text-center mb-8">
+            <h1 class="text-3xl md:text-4xl font-bold text-white">Rekapitulasi Kehadiran Karyawan</h1>
+            <p class="text-gray-400 mt-2">Input data kehadiran menggunakan Unix Timestamp untuk kalkulasi otomatis.</p>
+        </header>
+
+        <main class="grid grid-cols-1 lg:grid-cols-5 gap-6">
+            <!-- Kolom Input dan Pengaturan -->
+            <div class="lg:col-span-2 flex flex-col gap-6">
+                <div class="card p-6 rounded-lg">
+                    <h2 class="text-xl font-semibold mb-4 text-white">Input Data Kehadiran</h2>
+                    <div class="space-y-4">
+                        <div>
+                            <label for="employeeName" class="block text-sm font-medium mb-1">Nama Karyawan</label>
+                            <input type="text" id="employeeName" class="input-field w-full p-2 rounded-md" placeholder="e.g., Budi Santoso">
+                        </div>
+                        <div>
+                            <label for="clockInTimestamp" class="block text-sm font-medium mb-1">Timestamp Masuk</label>
+                            <input type="number" id="clockInTimestamp" class="input-field w-full p-2 rounded-md" placeholder="e.g., 1725152400">
+                            <p id="clockInPreview" class="timestamp-preview"></p>
+                        </div>
+                        <div>
+                            <label for="clockOutTimestamp" class="block text-sm font-medium mb-1">Timestamp Pulang</label>
+                            <input type="number" id="clockOutTimestamp" class="input-field w-full p-2 rounded-md" placeholder="e.g., 1725184800">
+                             <p id="clockOutPreview" class="timestamp-preview"></p>
+                        </div>
+                        <button id="saveButton" class="w-full btn-primary font-semibold py-2 px-4 rounded-md">Simpan Data</button>
+                    </div>
+                </div>
+
+                <div class="card p-6 rounded-lg">
+                    <h2 class="text-xl font-semibold mb-4 text-white">Pengaturan Jam Kerja</h2>
+                     <div class="space-y-4">
+                        <div>
+                            <label for="standardIn" class="block text-sm font-medium mb-1">Jam Masuk Standar</label>
+                            <input type="time" id="standardIn" value="08:00" class="input-field w-full p-2 rounded-md">
+                        </div>
+                        <div>
+                            <label for="standardOut" class="block text-sm font-medium mb-1">Jam Pulang Standar</label>
+                            <input type="time" id="standardOut" value="17:00" class="input-field w-full p-2 rounded-md">
+                        </div>
+                        <button id="saveSettings" class="w-full btn-secondary font-semibold py-2 px-4 rounded-md">Simpan Pengaturan</button>
+                    </div>
+                </div>
+
+                 <div class="card p-6 rounded-lg">
+                    <h2 class="text-xl font-semibold mb-4 text-white">Akumulasi</h2>
+                     <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-center">
+                        <div>
+                            <p class="text-sm text-gray-400">Total Jam Kerja Minggu Ini</p>
+                            <p id="weeklyHours" class="text-2xl font-bold">-</p>
+                        </div>
+                        <div>
+                            <p class="text-sm text-gray-400">Total Jam Kerja Bulan Ini</p>
+                            <p id="monthlyHours" class="text-2xl font-bold">-</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Kolom Riwayat -->
+            <div class="lg:col-span-3 flex flex-col gap-6">
+                <div class="card p-6 rounded-lg">
+                    <h2 class="text-xl font-semibold mb-4 text-white">Tabel Rekapitulasi Kehadiran</h2>
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-left text-sm">
+                            <thead class="border-b border-gray-600">
+                                <tr>
+                                    <th class="p-2">Nama</th>
+                                    <th class="p-2">Tanggal</th>
+                                    <th class="p-2">Jam Masuk</th>
+                                    <th class="p-2">Jam Pulang</th>
+                                    <th class="p-2 text-yellow-400">Terlambat</th>
+                                    <th class="p-2 text-blue-400">Pulang Awal</th>
+                                    <th class="p-2">Durasi Kerja</th>
+                                    <th class="p-2 text-right">Aksi</th>
+                                </tr>
+                            </thead>
+                            <tbody id="historyTableBody">
+                                <!-- Data riwayat akan ditambahkan di sini -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            // Referensi Elemen DOM
+            const nameInput = document.getElementById('employeeName');
+            const clockInTimestampInput = document.getElementById('clockInTimestamp');
+            const clockOutTimestampInput = document.getElementById('clockOutTimestamp');
+            const clockInPreview = document.getElementById('clockInPreview');
+            const clockOutPreview = document.getElementById('clockOutPreview');
+            const saveButton = document.getElementById('saveButton');
+            const standardInInput = document.getElementById('standardIn');
+            const standardOutInput = document.getElementById('standardOut');
+            const saveSettingsButton = document.getElementById('saveSettings');
+            
+            // Elemen Display
+            const weeklyHoursEl = document.getElementById('weeklyHours');
+            const monthlyHoursEl = document.getElementById('monthlyHours');
+            const historyTableBody = document.getElementById('historyTableBody');
+
+            // Kunci Local Storage
+            const RECORDS_KEY = 'attendanceRecords_ts';
+            const SETTINGS_KEY = 'attendanceSettings_ts';
+
+            // Inisialisasi Aplikasi
+            loadSettings();
+            calculateAndRenderAll();
+
+            // Event Listeners
+            clockInTimestampInput.addEventListener('input', (e) => handleTimestampInput(e, clockInPreview));
+            clockOutTimestampInput.addEventListener('input', (e) => handleTimestampInput(e, clockOutPreview));
+            saveButton.addEventListener('click', handleSaveRecord);
+            saveSettingsButton.addEventListener('click', handleSaveSettings);
+            historyTableBody.addEventListener('click', handleHistoryActions);
+
+            // Fungsi untuk mengkonversi timestamp ke format tanggal & waktu saat user mengetik
+            function handleTimestampInput(event, displayElement) {
+                const timestamp = event.target.value;
+                if (timestamp && timestamp.length >= 10) {
+                    // Unix timestamp in seconds, JS Date needs milliseconds
+                    const date = new Date(parseInt(timestamp) * 1000);
+                    if (!isNaN(date)) {
+                         displayElement.textContent = date.toLocaleString('id-ID', {
+                            weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', 
+                            hour: '2-digit', minute: '2-digit', second: '2-digit'
+                        });
+                    } else {
+                        displayElement.textContent = 'Timestamp tidak valid';
+                    }
+                } else {
+                    displayElement.textContent = '';
+                }
+            }
+
+            // Fungsi untuk menyimpan record kehadiran
+            function handleSaveRecord() {
+                const name = nameInput.value.trim();
+                const clockInTimestamp = clockInTimestampInput.value;
+                const clockOutTimestamp = clockOutTimestampInput.value;
+
+                if (!name || !clockInTimestamp || !clockOutTimestamp) {
+                    alert('Harap isi semua kolom: Nama, Timestamp Masuk, dan Timestamp Pulang.');
+                    return;
+                }
+                
+                if (parseInt(clockOutTimestamp) <= parseInt(clockInTimestamp)) {
+                    alert('Timestamp Pulang harus lebih besar dari Timestamp Masuk.');
+                    return;
+                }
+
+                let records = getRecords();
+                const newRecord = {
+                    id: Date.now(), // Unique ID for each record
+                    name,
+                    clockInTimestamp: parseInt(clockInTimestamp),
+                    clockOutTimestamp: parseInt(clockOutTimestamp)
+                };
+                records.push(newRecord);
+                localStorage.setItem(RECORDS_KEY, JSON.stringify(records));
+                
+                // Kosongkan input setelah menyimpan
+                nameInput.value = '';
+                clockInTimestampInput.value = '';
+                clockOutTimestampInput.value = '';
+                clockInPreview.textContent = '';
+                clockOutPreview.textContent = '';
+
+                calculateAndRenderAll();
+            }
+            
+            // Fungsi untuk menyimpan pengaturan jam kerja
+            function handleSaveSettings() {
+                const settings = {
+                    standardIn: standardInInput.value,
+                    standardOut: standardOutInput.value
+                };
+                localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+                alert('Pengaturan berhasil disimpan!');
+                calculateAndRenderAll();
+            }
+            
+            // Fungsi untuk aksi pada tabel riwayat (hapus)
+            function handleHistoryActions(e) {
+                if (e.target.classList.contains('delete-btn')) {
+                    const recordId = e.target.dataset.id;
+                    if (confirm(`Apakah Anda yakin ingin menghapus data ini?`)) {
+                        deleteRecord(recordId);
+                        calculateAndRenderAll();
+                    }
+                }
+            }
+            
+            function deleteRecord(id) {
+                let records = getRecords();
+                records = records.filter(r => r.id !== parseInt(id));
+                localStorage.setItem(RECORDS_KEY, JSON.stringify(records));
+            }
+
+            // Fungsi utama untuk kalkulasi dan rendering UI
+            function calculateAndRenderAll() {
+                renderHistoryTable();
+                renderAggregateSummaries();
+            }
+            
+            // Render tabel riwayat
+            function renderHistoryTable() {
+                const records = getRecords();
+                const settings = getSettings();
+                
+                // Urutkan dari yang terbaru
+                records.sort((a, b) => b.clockInTimestamp - a.clockInTimestamp);
+
+                historyTableBody.innerHTML = '';
+                if (records.length === 0) {
+                    historyTableBody.innerHTML = `<tr><td colspan="8" class="text-center p-4 text-gray-500">Belum ada data.</td></tr>`;
+                    return;
+                }
+
+                const [stdInHour, stdInMin] = settings.standardIn.split(':').map(Number);
+                const [stdOutHour, stdOutMin] = settings.standardOut.split(':').map(Number);
+                
+                records.forEach(r => {
+                    const clockInDate = new Date(r.clockInTimestamp * 1000);
+                    const clockOutDate = new Date(r.clockOutTimestamp * 1000);
+
+                    // Buat waktu standar pada HARI YANG SAMA dengan record
+                    const standardInTime = new Date(clockInDate);
+                    standardInTime.setHours(stdInHour, stdInMin, 0, 0);
+
+                    const standardOutTime = new Date(clockInDate); // Asumsi pulang di hari yang sama
+                    standardOutTime.setHours(stdOutHour, stdOutMin, 0, 0);
+
+                    const workDurationMs = clockOutDate - clockInDate;
+                    const latenessMs = Math.max(0, clockInDate - standardInTime);
+                    const earlyLeaveMs = Math.max(0, standardOutTime - clockOutDate);
+                    
+                    const row = document.createElement('tr');
+                    row.className = 'border-b border-gray-700 hover:bg-gray-800';
+                    row.innerHTML = `
+                        <td class="p-2 font-semibold">${r.name}</td>
+                        <td class="p-2">${clockInDate.toLocaleDateString('id-ID', {day: '2-digit', month: 'short', year: 'numeric'})}</td>
+                        <td class="p-2">${clockInDate.toLocaleTimeString('id-ID', {hour: '2-digit', minute: '2-digit'})}</td>
+                        <td class="p-2">${clockOutDate.toLocaleTimeString('id-ID', {hour: '2-digit', minute: '2-digit'})}</td>
+                        <td class="p-2 text-yellow-400">${formatDuration(latenessMs)}</td>
+                        <td class="p-2 text-blue-400">${formatDuration(earlyLeaveMs)}</td>
+                        <td class="p-2 font-bold">${formatDuration(workDurationMs, true)}</td>
+                        <td class="p-2 text-right">
+                            <button data-id="${r.id}" class="delete-btn text-xs py-1 px-2 rounded-md btn-danger">Hapus</button>
+                        </td>
+                    `;
+                    historyTableBody.appendChild(row);
+                });
+            }
+
+            // Render ringkasan akumulasi (mingguan & bulanan)
+            function renderAggregateSummaries() {
+                const records = getRecords();
+                
+                const today = new Date();
+                today.setHours(0, 0, 0, 0); // Start of today
+
+                // Get Sunday of the current week as the start of the week
+                const startOfWeek = new Date(today);
+                startOfWeek.setDate(today.getDate() - today.getDay());
+
+                const currentMonth = today.getMonth();
+                const currentYear = today.getFullYear();
+                
+                let weeklyMs = 0;
+                let monthlyMs = 0;
+                
+                records.forEach(r => {
+                    const recordDate = new Date(r.clockInTimestamp * 1000);
+                    const duration = (r.clockOutTimestamp - r.clockInTimestamp) * 1000;
+                    
+                    // Cek mingguan
+                    if (recordDate >= startOfWeek) {
+                        weeklyMs += duration;
+                    }
+                    
+                    // Cek bulanan
+                    if (recordDate.getMonth() === currentMonth && recordDate.getFullYear() === currentYear) {
+                        monthlyMs += duration;
+                    }
+                });
+                
+                weeklyHoursEl.textContent = formatDuration(weeklyMs, true);
+                monthlyHoursEl.textContent = formatDuration(monthlyMs, true);
+            }
+
+            // Fungsi Helper
+            function getRecords() {
+                return JSON.parse(localStorage.getItem(RECORDS_KEY)) || [];
+            }
+            
+            function getSettings() {
+                const saved = JSON.parse(localStorage.getItem(SETTINGS_KEY));
+                return saved || { standardIn: '08:00', standardOut: '17:00' };
+            }
+
+            function loadSettings() {
+                const settings = getSettings();
+                standardInInput.value = settings.standardIn;
+                standardOutInput.value = settings.standardOut;
+            }
+
+            function formatDuration(ms, showSeconds = false) {
+                if (ms <= 0) return '0m';
+                const totalSeconds = Math.floor(ms / 1000);
+                const hours = Math.floor(totalSeconds / 3600);
+                const minutes = Math.floor((totalSeconds % 3600) / 60);
+                const seconds = totalSeconds % 60;
+
+                let parts = [];
+                if (hours > 0) parts.push(`${hours}j`);
+                if (minutes > 0) parts.push(`${minutes}m`);
+                if (showSeconds && seconds > 0 && hours === 0) parts.push(`${seconds}d`);
+                
+                return parts.join(' ') || '0m';
+            }
+        });
+    </script>
+</body>
+</html>
+
