@@ -261,8 +261,6 @@
 
     <script>
         document.addEventListener('DOMContentLoaded', () => {
-            // Ganti placeholder ini dengan URL dan Kunci Anonim dari proyek Supabase Anda.
-            // Anda dapat menemukannya di Project Settings > API.
             const SUPABASE_URL = 'https://vijqvhwcapermeiftzqn.supabase.co';
             const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZpanF2aHdjYXBlcm1laWZ0enFuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTY3NjUzMDIsImV4cCI6MjA3MjM0MTMwMn0.HkVgodnM3AB8856FukeydmGVb-IiFJ3zahqSxrd84Tk';
             const TABLE_NAME = 'attendance_records';
@@ -383,7 +381,7 @@
 
                 if (error) {
                     console.error("Error saving data:", error);
-                    showAlert("Gagal", "Gagal menyimpan data ke database.");
+                    showAlert("Gagal", "Gagal menyimpan data ke database. Pastikan tabel dan RLS sudah diatur dengan benar.");
                     return;
                 }
                 
