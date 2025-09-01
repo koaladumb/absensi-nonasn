@@ -136,7 +136,7 @@
                 <!-- Menu Baru: Kelola Data -->
                 <div class="card p-6 rounded-lg">
                     <h2 class="text-xl font-semibold mb-4 text-white">Kelola Data</h2>
-                    <div class="space-y-4">
+                    <div class="grid grid-cols-1 gap-4">
                         <button id="backupDataBtn" class="w-full btn-secondary font-semibold py-2 px-4 rounded-md">Backup Database (JSON)</button>
                         <label for="restoreFile" class="w-full btn-secondary font-semibold py-2 px-4 rounded-md text-center file-upload-label">
                             Restore Database (JSON)
@@ -243,9 +243,11 @@
 
             // Fungsi untuk mengkonversi timestamp ke format tanggal & waktu saat user mengetik
             function handleTimestampInput(event, displayElement) {
-                const timestamp = event.target.value;
-                if (timestamp && timestamp.length >= 10) {
-                    const date = new Date(parseInt(timestamp) * 1000);
+                const timestamp = parseInt(event.target.value);
+                if (timestamp && !isNaN(timestamp)) {
+                    // Cek apakah timestamp dalam milidetik atau detik
+                    const isMs = timestamp > 1e12; // Jika lebih besar dari 1 triliun, asumsikan milidetik
+                    const date = new Date(isMs ? timestamp : timestamp * 1000);
                     if (!isNaN(date)) {
                          displayElement.textContent = date.toLocaleString('id-ID', {
                             weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', 
@@ -270,8 +272,8 @@
                     return;
                 }
 
-                const clockInTimestamp = clockInValue ? parseInt(clockInValue) : null;
-                const clockOutTimestamp = clockOutValue ? parseInt(clockOutValue) : null;
+                const clockInTimestamp = clockInValue ? (clockInValue.length > 12 ? parseInt(clockInValue) / 1000 : parseInt(clockInValue)) : null;
+                const clockOutTimestamp = clockOutValue ? (clockOutValue.length > 12 ? parseInt(clockOutValue) / 1000 : parseInt(clockOutValue)) : null;
 
                 if (clockInTimestamp && clockOutTimestamp && clockOutTimestamp <= clockInTimestamp) {
                     showAlert('Input Tidak Valid', 'Timestamp Pulang harus lebih besar dari Timestamp Masuk.');
