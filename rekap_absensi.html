@@ -301,6 +301,7 @@
                     db = getFirestore();
                     userId = user.uid;
                     const appId = window.__app_id;
+                    // Updated collection path to include the correct collection name
                     recordsCollection = collection(db, `artifacts/${appId}/users/${userId}/attendanceRecords`);
                     userIdDisplay.textContent = `User ID: ${userId}`;
                     userIdDisplay.classList.remove('hidden');
