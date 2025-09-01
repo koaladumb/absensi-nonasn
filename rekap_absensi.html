@@ -81,7 +81,7 @@
         </header>
 
         <main class="grid grid-cols-1 lg:grid-cols-5 gap-6">
-            <!-- Kolom Input dan Pengaturan -->
+            <!-- Kolom Input -->
             <div class="lg:col-span-2 flex flex-col gap-6">
                 <div class="card p-6 rounded-lg">
                     <h2 class="text-xl font-semibold mb-4 text-white">Input Data Kehadiran</h2>
@@ -118,7 +118,7 @@
                     </div>
                 </div>
                 
-                <!-- New Menu: Manage Data -->
+                <!-- Menu: Kelola Data -->
                 <div class="card p-6 rounded-lg">
                     <h2 class="text-xl font-semibold mb-4 text-white">Kelola Data</h2>
                     <div class="grid grid-cols-1 gap-4">
@@ -144,7 +144,7 @@
                             <thead class="border-b border-gray-600">
                                 <tr>
                                     <th class="p-2">Nama</th>
-                                    <th class="p-2">Hari</th> <!-- New Day column -->
+                                    <th class="p-2">Hari</th>
                                     <th class="p-2">Tanggal</th>
                                     <th class="p-2">Jam Masuk</th>
                                     <th class="p-2">Jam Pulang</th>
@@ -155,7 +155,7 @@
                                 </tr>
                             </thead>
                             <tbody id="historyTableBody">
-                                <!-- History data will be added here -->
+                                <!-- Data riwayat akan ditambahkan di sini -->
                             </tbody>
                         </table>
                     </div>
@@ -178,7 +178,7 @@
 
     <script>
         document.addEventListener('DOMContentLoaded', () => {
-            // DOM element references
+            // Referensi Elemen DOM
             const nameInput = document.getElementById('employeeName');
             const clockInTimestampInput = document.getElementById('clockInTimestamp');
             const clockOutTimestampInput = document.getElementById('clockOutTimestamp');
@@ -186,7 +186,7 @@
             const clockOutPreview = document.getElementById('clockOutPreview');
             const saveButton = document.getElementById('saveButton');
             
-            // Display elements
+            // Elemen Display
             const weeklyHoursEl = document.getElementById('weeklyHours');
             const monthlyHoursEl = document.getElementById('monthlyHours');
             const historyTableBody = document.getElementById('historyTableBody');
@@ -197,16 +197,16 @@
             const modalMessage = document.getElementById('modalMessage');
             const modalActions = document.getElementById('modalActions');
 
-            // Manage Data menu elements
+            // Elemen menu Kelola Data
             const backupDataBtn = document.getElementById('backupDataBtn');
             const restoreFile = document.getElementById('restoreFile');
             const deleteAllDataBtn = document.getElementById('deleteAllDataBtn');
             const exportXlsxBtn = document.getElementById('exportXlsxBtn');
 
-            // Local Storage keys
+            // Kunci Local Storage
             const RECORDS_KEY = 'attendanceRecords_ts';
 
-            // Application initialization
+            // Inisialisasi Aplikasi
             calculateAndRenderAll();
 
             // Event Listeners
@@ -215,18 +215,18 @@
             saveButton.addEventListener('click', handleSaveRecord);
             historyTableBody.addEventListener('click', handleHistoryActions);
             
-            // Event listeners for the new menu
+            // Event Listeners for the new menu
             backupDataBtn.addEventListener('click', handleBackupData);
             restoreFile.addEventListener('change', handleRestoreData);
             deleteAllDataBtn.addEventListener('click', handleDeleteAllData);
             exportXlsxBtn.addEventListener('click', handleExportXlsx);
 
-            // Function to convert timestamp to date/time format as user types
+            // Fungsi untuk mengkonversi timestamp ke format tanggal & waktu saat user mengetik
             function handleTimestampInput(event, displayElement) {
                 const timestamp = parseInt(event.target.value);
                 if (timestamp && !isNaN(timestamp)) {
-                    // Check if the timestamp is in milliseconds or seconds
-                    const isMs = timestamp > 1e12; // If greater than 1 trillion, assume milliseconds
+                    // Cek apakah timestamp dalam milidetik atau detik
+                    const isMs = timestamp > 1e12; // Jika lebih besar dari 1 triliun, asumsikan milidetik
                     const date = new Date(isMs ? timestamp : timestamp * 1000);
                     if (!isNaN(date)) {
                          displayElement.textContent = date.toLocaleString('id-ID', {
@@ -241,7 +241,7 @@
                 }
             }
 
-            // Function to save or update an attendance record
+            // Fungsi untuk menyimpan atau memperbarui record kehadiran
             function handleSaveRecord() {
                 const name = nameInput.value.trim();
                 const clockInValue = clockInTimestampInput.value;
@@ -388,8 +388,8 @@
                         <td class="p-2 font-semibold">${r.name}</td>
                         <td class="p-2">${displayDateObj.toLocaleDateString('id-ID', {weekday: 'long'})}</td>
                         <td class="p-2">${displayDateObj.toLocaleDateString('id-ID', {day: '2-digit', month: 'short', year: 'numeric'})}</td>
-                        <td class="p-2">${clockInDate ? clockInDate.toLocaleTimeString('id-ID', {hour: '2-digit', minute: '2-digit'}) : '-'}</td>
-                        <td class="p-2">${clockOutDate ? clockOutDate.toLocaleTimeString('id-ID', {hour: '2-digit', minute: '2-digit'}) : '-'}</td>
+                        <td class="p-2">${clockInDate ? clockInDate.toLocaleTimeString('id-ID', {hour: '2-digit', minute: '2-digit', second: '2-digit'}) : '-'}</td>
+                        <td class="p-2">${clockOutDate ? clockOutDate.toLocaleTimeString('id-ID', {hour: '2-digit', minute: '2-digit', second: '2-digit'}) : '-'}</td>
                         <td class="p-2 text-yellow-400">${latenessMs !== null ? formatDuration(latenessMs) : '-'}</td>
                         <td class="p-2 text-blue-400">${earlyLeaveMs !== null ? formatDuration(earlyLeaveMs) : '-'}</td>
                         <td class="p-2 font-bold">${workDurationMs !== null ? formatDuration(workDurationMs, true) : '-'}</td>
@@ -569,7 +569,7 @@
                 let parts = [];
                 if (hours > 0) parts.push(`${hours}j`);
                 if (minutes > 0) parts.push(`${minutes}m`);
-                if (showSeconds && seconds > 0 && hours === 0) parts.push(`${seconds}d`);
+                if (showSeconds && seconds > 0) parts.push(`${seconds}d`);
                 
                 return parts.join(' ') || '0m';
             }
