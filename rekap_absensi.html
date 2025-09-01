@@ -392,7 +392,7 @@
                         <td class="p-2">${clockOutDate ? clockOutDate.toLocaleTimeString('id-ID', {hour: '2-digit', minute: '2-digit', second: '2-digit'}) : '-'}</td>
                         <td class="p-2 text-yellow-400">${latenessMs !== null ? formatDuration(latenessMs) : '-'}</td>
                         <td class="p-2 text-blue-400">${earlyLeaveMs !== null ? formatDuration(earlyLeaveMs) : '-'}</td>
-                        <td class="p-2 font-bold">${workDurationMs !== null ? formatDuration(workDurationMs, true) : '-'}</td>
+                        <td class="p-2 font-bold">${workDurationMs !== null ? formatDuration(workDurationMs) : '-'}</td>
                         <td class="p-2 text-right">
                             <button data-id="${r.id}" class="delete-btn text-xs py-1 px-2 rounded-md btn-secondary">Hapus</button>
                         </td>
@@ -422,8 +422,8 @@
                     }
                 });
                 
-                weeklyHoursEl.textContent = formatDuration(weeklyMs, true);
-                monthlyHoursEl.textContent = formatDuration(monthlyMs, true);
+                weeklyHoursEl.textContent = formatDuration(weeklyMs);
+                monthlyHoursEl.textContent = formatDuration(monthlyMs);
             }
 
             // --- Modal Functions ---
@@ -559,19 +559,17 @@
                 return JSON.parse(localStorage.getItem(RECORDS_KEY)) || [];
             }
             
-            function formatDuration(ms, showSeconds = false) {
-                if (ms <= 0) return '0m';
+            // Fungsi untuk memformat durasi menjadi hh:mm:ss
+            function formatDuration(ms) {
+                if (ms <= 0) return '00:00:00';
                 const totalSeconds = Math.floor(ms / 1000);
                 const hours = Math.floor(totalSeconds / 3600);
                 const minutes = Math.floor((totalSeconds % 3600) / 60);
                 const seconds = totalSeconds % 60;
 
-                let parts = [];
-                if (hours > 0) parts.push(`${hours}j`);
-                if (minutes > 0) parts.push(`${minutes}m`);
-                if (showSeconds && seconds > 0) parts.push(`${seconds}d`);
-                
-                return parts.join(' ') || '0m';
+                const pad = (num) => num.toString().padStart(2, '0');
+
+                return `${pad(hours)}:${pad(minutes)}:${pad(seconds)}`;
             }
         });
     </script>
