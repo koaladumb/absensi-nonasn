@@ -187,7 +187,8 @@
             appId: "1:491057180070:web:0ce651224f84225c1eb367",
             measurementId: "G-XX3S6X37FN"
         };
-        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+        // Perbaikan: Gunakan ID aplikasi dari data user
+        const appId = 'absensi-karyawan-dfe06';
         const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
         
         let db;
