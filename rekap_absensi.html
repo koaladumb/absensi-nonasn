@@ -177,7 +177,16 @@
         const modalActions = document.getElementById('modalActions');
 
         // Konfigurasi Firebase
-        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : null;
+        const firebaseConfig = {
+            apiKey: "AIzaSyDGp54rAM9oTndNG2Gb5WzuRCsos31L7jA",
+            authDomain: "absensi-karyawan-dfe06.firebaseapp.com",
+            databaseURL: "https://absensi-karyawan-dfe06-default-rtdb.asia-southeast1.firebasedatabase.app",
+            projectId: "absensi-karyawan-dfe06",
+            storageBucket: "absensi-karyawan-dfe06.firebasestorage.app",
+            messagingSenderId: "491057180070",
+            appId: "1:491057180070:web:0ce651224f84225c1eb367",
+            measurementId: "G-XX3S6X37FN"
+        };
         const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
         const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
         
@@ -186,31 +195,21 @@
         let userId;
 
         // Inisialisasi Firebase
-        if (!firebaseConfig || Object.keys(firebaseConfig).length === 0) {
-            handleFirebaseError('Konfigurasi Firebase tidak ditemukan. Silakan pastikan variabel __firebase_config sudah benar.');
-        } else {
-            try {
-                const app = initializeApp(firebaseConfig);
-                db = getFirestore(app);
-                auth = getAuth(app);
-                connectionStatus.textContent = 'Status: Terhubung';
-                connectionStatus.classList.remove('status-warn');
-                connectionStatus.classList.add('status-ok');
-            } catch (error) {
-                handleFirebaseError('Gagal menginisialisasi Firebase. Detail: ' + error.message);
-                console.error(error);
-            }
-        }
-        
-        // Fungsi untuk menangani dan menampilkan error Firebase
-        function handleFirebaseError(message) {
-            showAlert('Kesalahan', message);
+        try {
+            const app = initializeApp(firebaseConfig);
+            db = getFirestore(app);
+            auth = getAuth(app);
+            connectionStatus.textContent = 'Status: Terhubung';
+            connectionStatus.classList.remove('status-warn');
+            connectionStatus.classList.add('status-ok');
+        } catch (error) {
+            showAlert('Kesalahan Inisialisasi Firebase', 'Gagal menginisialisasi Firebase. Pastikan konfigurasi Anda sudah benar. Detail: ' + error.message);
             connectionStatus.textContent = 'Status: Gagal Terhubung';
             connectionStatus.classList.remove('status-warn');
             connectionStatus.classList.add('status-error');
+            console.error(error);
         }
-
-
+        
         // Otentikasi dan siapkan listener data
         if (auth) {
              onAuthStateChanged(auth, async (user) => {
