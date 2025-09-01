@@ -3,11 +3,41 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Rekapitulasi Kehadiran Karyawan (Timestamp)</title>
+    <title>Rekapitulasi Kehadiran Karyawan (Firebase)</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <!-- SheetJS library for Excel export -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <!-- Firebase SDK Imports -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, getDoc, setDoc, deleteDoc, onSnapshot, collection, query, where, addDoc, getDocs, writeBatch, Timestamp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        
+        // This is a global variable provided by the canvas environment
+        window.__firebase_config = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
+        window.__initial_auth_token = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+        window.__app_id = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+
+        window.firebaseApp = initializeApp(window.__firebase_config);
+        window.db = getFirestore(window.firebaseApp);
+        window.auth = getAuth(window.firebaseApp);
+
+        // Sign in anonymously or with custom token
+        onAuthStateChanged(window.auth, async (user) => {
+            if (!user) {
+                try {
+                    if (window.__initial_auth_token) {
+                        await signInWithCustomToken(window.auth, window.__initial_auth_token);
+                    } else {
+                        await signInAnonymously(window.auth);
+                    }
+                } catch (error) {
+                    console.error("Firebase Auth Error:", error);
+                }
+            }
+        });
+    </script>
     <style>
         body {
             font-family: 'Inter', sans-serif;
@@ -92,9 +122,10 @@
     <div class="max-w-7xl mx-auto">
         <header class="text-center mb-8">
             <h1 class="text-3xl md:text-4xl font-bold text-white">Rekapitulasi Kehadiran Karyawan</h1>
-            <p class="text-gray-400 mt-2">Input data kehadiran menggunakan Unix Timestamp untuk kalkulasi otomatis.</p>
+            <p class="text-gray-400 mt-2">Data tersinkronisasi secara real-time melalui Firebase.</p>
+            <p id="userIdDisplay" class="text-sm text-gray-500 mt-2 hidden"></p>
         </header>
-
+        
         <main class="grid grid-cols-1 lg:grid-cols-5 gap-6">
             <!-- Kolom Input & Ringkasan Akumulasi Total -->
             <div class="lg:col-span-2 flex flex-col gap-6">
@@ -229,9 +260,16 @@
         </div>
     </div>
 
-    <script>
+    <script type="module">
+        import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, collection, doc, setDoc, deleteDoc, onSnapshot, query, where, getDocs, writeBatch, Timestamp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
         document.addEventListener('DOMContentLoaded', () => {
-            // Referensi Elemen DOM
+            const auth = getAuth();
+            const userIdDisplay = document.getElementById('userIdDisplay');
+            let db, userId, recordsCollection;
+            let currentRecords = [];
+
             const nameInput = document.getElementById('employeeName');
             const clockInTimestampInput = document.getElementById('clockInTimestamp');
             const clockOutTimestampInput = document.getElementById('clockOutTimestamp');
@@ -239,45 +277,54 @@
             const clockOutPreview = document.getElementById('clockOutPreview');
             const saveButton = document.getElementById('saveButton');
             
-            // Elemen Display
             const weeklyHoursEl = document.getElementById('weeklyHours');
             const monthlyHoursEl = document.getElementById('monthlyHours');
             const historyTableBody = document.getElementById('historyTableBody');
             const employeeSummaryTableBody = document.getElementById('employeeSummaryTableBody');
-
-            // Modal elements
             const modal = document.getElementById('modal');
             const modalTitle = document.getElementById('modalTitle');
             const modalMessage = document.getElementById('modalMessage');
             const modalActions = document.getElementById('modalActions');
-
-            // Elemen menu Kelola Data
             const backupDataBtn = document.getElementById('backupDataBtn');
             const restoreFile = document.getElementById('restoreFile');
             const deleteAllDataBtn = document.getElementById('deleteAllDataBtn');
             const exportHistoryBtn = document.getElementById('exportHistoryBtn');
             const exportSummaryBtn = document.getElementById('exportSummaryBtn');
-
-            // Elemen Tanggal Akumulasi
             const startDateInput = document.getElementById('startDate');
             const endDateInput = document.getElementById('endDate');
             const showSummaryBtn = document.getElementById('showSummaryBtn');
             const summaryDurationHeader = document.getElementById('summaryDurationHeader');
 
-            // Kunci Local Storage
-            const RECORDS_KEY = 'attendanceRecords_ts';
+            // Listen for auth state changes to initialize Firestore
+            onAuthStateChanged(auth, (user) => {
+                if (user) {
+                    db = getFirestore();
+                    userId = user.uid;
+                    const appId = window.__app_id;
+                    recordsCollection = collection(db, `artifacts/${appId}/users/${userId}/attendanceRecords`);
+                    userIdDisplay.textContent = `User ID: ${userId}`;
+                    userIdDisplay.classList.remove('hidden');
+                    
+                    // Listen for real-time updates from Firestore
+                    onSnapshot(recordsCollection, (snapshot) => {
+                        currentRecords = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                        calculateAndRenderAll();
+                    }, (error) => {
+                        console.error("Error fetching data:", error);
+                        showAlert('Error', 'Gagal memuat data. Silakan coba lagi.');
+                    });
 
-            // Inisialisasi Aplikasi
-            calculateAndRenderAll();
-            setInitialDateRange();
+                    setInitialDateRange();
+                } else {
+                    userIdDisplay.textContent = 'Menunggu otentikasi...';
+                }
+            });
 
             // Event Listeners
             clockInTimestampInput.addEventListener('input', (e) => handleTimestampInput(e, clockInPreview));
             clockOutTimestampInput.addEventListener('input', (e) => handleTimestampInput(e, clockOutPreview));
             saveButton.addEventListener('click', handleSaveRecord);
             historyTableBody.addEventListener('click', handleHistoryActions);
-            
-            // Event Listeners for the new menu
             backupDataBtn.addEventListener('click', handleBackupData);
             restoreFile.addEventListener('change', handleRestoreData);
             deleteAllDataBtn.addEventListener('click', handleDeleteAllData);
@@ -285,7 +332,6 @@
             exportSummaryBtn.addEventListener('click', handleExportSummaryXlsx);
             showSummaryBtn.addEventListener('click', handleShowSummary);
 
-            // Fungsi untuk menetapkan rentang tanggal awal (mis. 1 bulan terakhir)
             function setInitialDateRange() {
                 const today = new Date();
                 const oneMonthAgo = new Date();
@@ -300,15 +346,13 @@
                 
                 startDateInput.value = formatDate(oneMonthAgo);
                 endDateInput.value = formatDate(today);
-                handleShowSummary(); // Tampilkan data awal
+                handleShowSummary(); 
             }
             
-            // Fungsi untuk mengkonversi timestamp ke format tanggal & waktu saat user mengetik
             function handleTimestampInput(event, displayElement) {
                 const timestamp = parseInt(event.target.value);
                 if (timestamp && !isNaN(timestamp)) {
-                    // Cek apakah timestamp dalam milidetik atau detik
-                    const isMs = timestamp > 1e12; // Jika lebih besar dari 1 triliun, asumsikan milidetik
+                    const isMs = timestamp > 1e12; 
                     const date = new Date(isMs ? timestamp : timestamp * 1000);
                     if (!isNaN(date)) {
                          displayElement.textContent = date.toLocaleString('id-ID', {
@@ -323,8 +367,7 @@
                 }
             }
 
-            // Fungsi untuk menyimpan atau memperbarui record kehadiran
-            function handleSaveRecord() {
+            async function handleSaveRecord() {
                 const name = nameInput.value.trim();
                 const clockInValue = clockInTimestampInput.value;
                 const clockOutValue = clockOutTimestampInput.value;
@@ -333,95 +376,104 @@
                     showAlert('Input Tidak Lengkap', 'Harap isi nama karyawan dan minimal satu timestamp (masuk atau pulang).');
                     return;
                 }
+                
+                const clockInTimestamp = clockInValue ? Timestamp.fromMillis(clockInValue.length > 12 ? parseInt(clockInValue) : parseInt(clockInValue) * 1000) : null;
+                const clockOutTimestamp = clockOutValue ? Timestamp.fromMillis(clockOutValue.length > 12 ? parseInt(clockOutValue) : parseInt(clockOutValue) * 1000) : null;
 
-                const clockInTimestamp = clockInValue ? (clockInValue.length > 12 ? parseInt(clockInValue) / 1000 : parseInt(clockInValue)) : null;
-                const clockOutTimestamp = clockOutValue ? (clockOutValue.length > 12 ? parseInt(clockOutValue) / 1000 : parseInt(clockOutValue)) : null;
-
-                if (clockInTimestamp && clockOutTimestamp && clockOutTimestamp <= clockInTimestamp) {
+                if (clockInTimestamp && clockOutTimestamp && clockOutTimestamp.seconds <= clockInTimestamp.seconds) {
                     showAlert('Input Tidak Valid', 'Timestamp Pulang harus lebih besar dari Timestamp Masuk.');
                     return;
                 }
 
                 const referenceTimestamp = clockInTimestamp || clockOutTimestamp;
-                const recordDate = new Date(referenceTimestamp * 1000);
+                const recordDate = referenceTimestamp.toDate();
                 
                 const startOfDay = new Date(recordDate);
                 startOfDay.setHours(0, 0, 0, 0);
-                const startOfDayTs = startOfDay.getTime() / 1000;
+                const startOfDayTs = Timestamp.fromDate(startOfDay);
 
                 const endOfDay = new Date(recordDate);
                 endOfDay.setHours(23, 59, 59, 999);
-                const endOfDayTs = endOfDay.getTime() / 1000;
-
-                let records = getRecords();
+                const endOfDayTs = Timestamp.fromDate(endOfDay);
                 
-                const recordIndex = records.findIndex(r => {
-                    const existingRecordTs = r.clockInTimestamp || r.clockOutTimestamp;
-                    return r.name.toLowerCase() === name.toLowerCase() && 
-                           existingRecordTs >= startOfDayTs && 
-                           existingRecordTs < endOfDayTs;
-                });
+                try {
+                    // Check if a record for the same person on the same day already exists
+                    const q = query(recordsCollection, 
+                        where('name', '==', name), 
+                        where('clockInTimestamp', '>=', startOfDayTs));
+                    const querySnapshot = await getDocs(q);
+                    
+                    let recordIdToUpdate = null;
+                    querySnapshot.forEach(doc => {
+                         const docTimestamp = doc.data().clockInTimestamp || doc.data().clockOutTimestamp;
+                         if (docTimestamp && docTimestamp.toDate().toDateString() === recordDate.toDateString()) {
+                            recordIdToUpdate = doc.id;
+                         }
+                    });
 
-                if (recordIndex > -1) {
-                    // Update existing record
-                    if (clockInTimestamp) records[recordIndex].clockInTimestamp = clockInTimestamp;
-                    if (clockOutTimestamp) records[recordIndex].clockOutTimestamp = clockOutTimestamp;
-                } else {
-                    // Create a new record
-                    const newRecord = {
-                        id: Date.now(),
-                        name,
-                        clockInTimestamp: clockInTimestamp,
-                        clockOutTimestamp: clockOutTimestamp
-                    };
-                    records.push(newRecord);
+                    if (recordIdToUpdate) {
+                        const docRef = doc(db, `artifacts/${window.__app_id}/users/${userId}/attendanceRecords`, recordIdToUpdate);
+                        const updateData = {};
+                        if (clockInTimestamp) updateData.clockInTimestamp = clockInTimestamp;
+                        if (clockOutTimestamp) updateData.clockOutTimestamp = clockOutTimestamp;
+                        await setDoc(docRef, updateData, { merge: true });
+                    } else {
+                        const newRecord = {
+                            name,
+                            clockInTimestamp,
+                            clockOutTimestamp
+                        };
+                        await addDoc(recordsCollection, newRecord);
+                    }
+                    
+                    nameInput.value = '';
+                    clockInTimestampInput.value = '';
+                    clockOutTimestampInput.value = '';
+                    clockInPreview.textContent = '';
+                    clockOutPreview.textContent = '';
+
+                } catch (e) {
+                    console.error("Error saving document: ", e);
+                    showAlert('Gagal Menyimpan', 'Terjadi kesalahan saat menyimpan data. Periksa konsol untuk detail.');
                 }
-                
-                localStorage.setItem(RECORDS_KEY, JSON.stringify(records));
-                
-                nameInput.value = '';
-                clockInTimestampInput.value = '';
-                clockOutTimestampInput.value = '';
-                clockInPreview.textContent = '';
-                clockOutPreview.textContent = '';
-
-                calculateAndRenderAll();
             }
             
-            function handleHistoryActions(e) {
+            async function handleHistoryActions(e) {
                 if (e.target.classList.contains('delete-btn')) {
                     const recordId = e.target.dataset.id;
-                    showConfirm('Konfirmasi Hapus', 'Apakah Anda yakin ingin menghapus data ini?', () => {
-                        deleteRecord(recordId);
-                        calculateAndRenderAll();
+                    showConfirm('Konfirmasi Hapus', 'Apakah Anda yakin ingin menghapus data ini?', async () => {
+                        try {
+                            const docRef = doc(db, `artifacts/${window.__app_id}/users/${userId}/attendanceRecords`, recordId);
+                            await deleteDoc(docRef);
+                        } catch (e) {
+                            console.error("Error deleting document: ", e);
+                            showAlert('Gagal Menghapus', 'Terjadi kesalahan saat menghapus data. Periksa konsol untuk detail.');
+                        }
                     });
                 }
             }
             
-            function deleteRecord(id) {
-                let records = getRecords();
-                records = records.filter(r => r.id !== parseInt(id));
-                localStorage.setItem(RECORDS_KEY, JSON.stringify(records));
-            }
-
             function calculateAndRenderAll() {
                 renderHistoryTable();
                 renderAggregateSummaries();
-                // renderEmployeeSummary(); // This is now called via handleShowSummary
+                handleShowSummary();
             }
             
             function renderHistoryTable() {
-                const records = getRecords();
+                const records = [...currentRecords];
                 
-                records.sort((a, b) => (b.clockInTimestamp || b.clockOutTimestamp) - (a.clockInTimestamp || a.clockOutTimestamp));
+                records.sort((a, b) => {
+                    const aDate = (a.clockInTimestamp || a.clockOutTimestamp)?.toDate() || new Date(0);
+                    const bDate = (b.clockInTimestamp || b.clockOutTimestamp)?.toDate() || new Date(0);
+                    return bDate.getTime() - aDate.getTime();
+                });
 
                 historyTableBody.innerHTML = '';
                 if (records.length === 0) {
                     historyTableBody.innerHTML = `<tr><td colspan="9" class="text-center p-4 text-gray-500">Belum ada data.</td></tr>`;
                     return;
                 }
-
-                // Default working schedule based on day
+                
                 const defaultDailySchedule = {
                     mon: { in: '07:30', out: '15:30' },
                     tue: { in: '07:30', out: '15:30' },
@@ -433,13 +485,12 @@
                 };
 
                 records.forEach(r => {
-                    const clockInDate = r.clockInTimestamp ? new Date(r.clockInTimestamp * 1000) : null;
-                    const clockOutDate = r.clockOutTimestamp ? new Date(r.clockOutTimestamp * 1000) : null;
-
+                    const clockInDate = r.clockInTimestamp ? r.clockInTimestamp.toDate() : null;
+                    const clockOutDate = r.clockOutTimestamp ? r.clockOutTimestamp.toDate() : null;
                     const displayDateObj = clockInDate || clockOutDate;
                     if (!displayDateObj) return; 
                     
-                    const dayOfWeek = displayDateObj.getDay(); // 0 = Sunday, 1 = Monday, ..., 6 = Saturday
+                    const dayOfWeek = displayDateObj.getDay();
                     const days = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
                     const dayKey = days[dayOfWeek];
                     
@@ -485,7 +536,7 @@
             }
 
             function renderAggregateSummaries() {
-                const records = getRecords();
+                const records = currentRecords;
                 const today = new Date();
                 today.setHours(0, 0, 0, 0);
                 const startOfWeek = new Date(today);
@@ -498,8 +549,8 @@
                 
                 records.forEach(r => {
                     if (r.clockInTimestamp && r.clockOutTimestamp) {
-                        const recordDate = new Date(r.clockInTimestamp * 1000);
-                        const duration = (r.clockOutTimestamp - r.clockInTimestamp) * 1000;
+                        const recordDate = r.clockInTimestamp.toDate();
+                        const duration = (r.clockOutTimestamp.toMillis() - r.clockInTimestamp.toMillis());
                         if (recordDate >= startOfWeek) weeklyMs += duration;
                         if (recordDate.getMonth() === currentMonth && recordDate.getFullYear() === currentYear) monthlyMs += duration;
                     }
@@ -509,13 +560,12 @@
                 monthlyHoursEl.textContent = formatDuration(monthlyMs);
             }
             
-            // Fungsi baru untuk menampilkan ringkasan berdasarkan rentang tanggal
             function handleShowSummary() {
                 const startDate = startDateInput.value ? new Date(startDateInput.value) : null;
                 const endDate = endDateInput.value ? new Date(endDateInput.value) : null;
 
                 if (!startDate || !endDate) {
-                    showAlert('Input Tanggal Tidak Lengkap', 'Harap isi tanggal mulai dan tanggal akhir.');
+                    renderEmployeeSummary(null, null); // Render empty if dates are not set
                     return;
                 }
                 
@@ -524,34 +574,37 @@
                     return;
                 }
                 
-                // Tambahkan 1 hari ke tanggal akhir agar inklusif
                 const adjustedEndDate = new Date(endDate);
                 adjustedEndDate.setDate(adjustedEndDate.getDate() + 1);
 
                 renderEmployeeSummary(startDate, adjustedEndDate);
             }
 
-            // Fungsi untuk merender akumulasi per karyawan
             function renderEmployeeSummary(startDate, endDate) {
-                const records = getRecords();
+                const records = currentRecords;
                 const summary = {};
                 
-                // Perbarui judul kolom
-                summaryDurationHeader.textContent = `Durasi (${startDate.toLocaleDateString('id-ID')} - ${endDate.toLocaleDateString('id-ID')})`;
+                if (startDate && endDate) {
+                    summaryDurationHeader.textContent = `Durasi (${startDate.toLocaleDateString('id-ID')} - ${endDate.toLocaleDateString('id-ID')})`;
+                } else {
+                    summaryDurationHeader.textContent = `Durasi Kerja`;
+                }
                 
-                records.forEach(r => {
-                    if (!r.clockInTimestamp || !r.clockOutTimestamp) return;
-                    const recordDate = new Date(r.clockInTimestamp * 1000);
+                if (startDate && endDate) {
+                    records.forEach(r => {
+                        if (!r.clockInTimestamp || !r.clockOutTimestamp) return;
+                        const recordDate = r.clockInTimestamp.toDate();
 
-                    if (recordDate >= startDate && recordDate < endDate) {
-                        const duration = (r.clockOutTimestamp - r.clockInTimestamp) * 1000;
-                        const name = r.name;
-                        if (!summary[name]) {
-                            summary[name] = 0;
+                        if (recordDate >= startDate && recordDate < endDate) {
+                            const duration = r.clockOutTimestamp.toMillis() - r.clockInTimestamp.toMillis();
+                            const name = r.name;
+                            if (!summary[name]) {
+                                summary[name] = 0;
+                            }
+                            summary[name] += duration;
                         }
-                        summary[name] += duration;
-                    }
-                });
+                    });
+                }
 
                 employeeSummaryTableBody.innerHTML = '';
                 const sortedNames = Object.keys(summary).sort();
@@ -573,7 +626,6 @@
                 });
             }
 
-            // --- Modal Functions ---
             function showAlert(title, message) {
                 modalTitle.textContent = title;
                 modalMessage.textContent = message;
@@ -612,21 +664,33 @@
                 };
             }
 
-            // --- New functions for Data Management ---
-            function handleBackupData() {
-                const data = {
-                    records: getRecords()
-                };
-                const dataStr = JSON.stringify(data, null, 2);
-                const blob = new Blob([dataStr], {type: "application/json"});
-                const url = URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = `backup_rekap_kehadiran_${Date.now()}.json`;
-                document.body.appendChild(a);
-                a.click();
-                document.body.removeChild(a);
-                URL.revokeObjectURL(url);
+            async function handleBackupData() {
+                try {
+                    const querySnapshot = await getDocs(recordsCollection);
+                    const records = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                    
+                    // Convert Timestamp to Unix timestamp for JSON
+                    const exportableRecords = records.map(r => ({
+                        ...r,
+                        clockInTimestamp: r.clockInTimestamp ? r.clockInTimestamp.toMillis() : null,
+                        clockOutTimestamp: r.clockOutTimestamp ? r.clockOutTimestamp.toMillis() : null,
+                    }));
+
+                    const data = { records: exportableRecords };
+                    const dataStr = JSON.stringify(data, null, 2);
+                    const blob = new Blob([dataStr], {type: "application/json"});
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = `backup_rekap_kehadiran_${Date.now()}.json`;
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                    URL.revokeObjectURL(url);
+                } catch (e) {
+                    console.error("Error backing up data:", e);
+                    showAlert('Gagal Backup', 'Terjadi kesalahan saat membuat backup. Periksa konsol untuk detail.');
+                }
             }
 
             function handleRestoreData(event) {
@@ -636,15 +700,38 @@
                 }
 
                 const reader = new FileReader();
-                reader.onload = (e) => {
+                reader.onload = async (e) => {
                     try {
                         const restoredData = JSON.parse(e.target.result);
                         if (restoredData.records) {
-                            showConfirm('Konfirmasi Restore', 'Ini akan menimpa semua data yang ada. Lanjutkan?', () => {
-                                localStorage.setItem(RECORDS_KEY, JSON.stringify(restoredData.records));
-                                showAlert('Berhasil', 'Data berhasil dipulihkan!');
-                                calculateAndRenderAll();
-                                handleShowSummary(); // Tampilkan data akumulasi yang baru
+                            showConfirm('Konfirmasi Restore', 'Ini akan menimpa semua data yang ada. Lanjutkan?', async () => {
+                                try {
+                                    // First, delete all existing records
+                                    const batch = writeBatch(db);
+                                    const querySnapshot = await getDocs(recordsCollection);
+                                    querySnapshot.docs.forEach(doc => {
+                                        batch.delete(doc.ref);
+                                    });
+                                    await batch.commit();
+
+                                    // Then, upload the new records
+                                    const newBatch = writeBatch(db);
+                                    restoredData.records.forEach(r => {
+                                        const newDocRef = doc(recordsCollection);
+                                        const recordToSave = {
+                                            name: r.name,
+                                            clockInTimestamp: r.clockInTimestamp ? Timestamp.fromMillis(r.clockInTimestamp) : null,
+                                            clockOutTimestamp: r.clockOutTimestamp ? Timestamp.fromMillis(r.clockOutTimestamp) : null,
+                                        };
+                                        newBatch.set(newDocRef, recordToSave);
+                                    });
+                                    await newBatch.commit();
+
+                                    showAlert('Berhasil', 'Data berhasil dipulihkan!');
+                                } catch (error) {
+                                    console.error("Error restoring data:", error);
+                                    showAlert('Gagal', 'Terjadi kesalahan saat memulihkan data. Pastikan format file benar.');
+                                }
                             });
                         } else {
                             showAlert('Gagal', 'File JSON tidak valid. Harap unggah file backup yang benar.');
@@ -656,45 +743,71 @@
                 reader.readAsText(file);
             }
 
-            function handleDeleteAllData() {
-                showConfirm('Konfirmasi Hapus Semua', 'Apakah Anda yakin ingin menghapus SEMUA data kehadiran? Tindakan ini tidak bisa dibatalkan.', () => {
-                    localStorage.removeItem(RECORDS_KEY);
-                    showAlert('Berhasil', 'Semua data telah dihapus.');
-                    calculateAndRenderAll();
-                    handleShowSummary(); // Perbarui tabel ringkasan
+            async function handleDeleteAllData() {
+                showConfirm('Konfirmasi Hapus Semua', 'Apakah Anda yakin ingin menghapus SEMUA data kehadiran? Tindakan ini tidak bisa dibatalkan.', async () => {
+                    try {
+                        const batch = writeBatch(db);
+                        const querySnapshot = await getDocs(recordsCollection);
+                        querySnapshot.docs.forEach(doc => {
+                            batch.delete(doc.ref);
+                        });
+                        await batch.commit();
+                        showAlert('Berhasil', 'Semua data telah dihapus.');
+                    } catch (e) {
+                        console.error("Error deleting all data:", e);
+                        showAlert('Gagal Menghapus', 'Terjadi kesalahan saat menghapus semua data.');
+                    }
                 });
             }
 
-            // --- New function for XLSX export (History Table) ---
             function handleExportHistoryXlsx() {
-                const records = getRecords();
-                const tableBody = historyTableBody.children;
-
+                const records = [...currentRecords];
                 if (records.length === 0) {
                     showAlert('Tidak Ada Data', 'Tidak ada data kehadiran untuk diekspor.');
                     return;
                 }
-
                 const data = [];
-                // Headers
                 data.push(['Nama Karyawan', 'Hari', 'Tanggal', 'Jam Masuk', 'Jam Pulang', 'Terlambat', 'Pulang Awal', 'Durasi Kerja']);
 
-                // Data rows
-                for (let i = 0; i < tableBody.length; i++) {
-                    const row = tableBody[i];
-                    const cells = row.querySelectorAll('td');
-                    const rowData = [
-                        cells[0].innerText, // Nama
-                        cells[1].innerText, // Hari
-                        cells[2].innerText, // Tanggal
-                        cells[3].innerText, // Jam Masuk
-                        cells[4].innerText, // Jam Pulang
-                        cells[5].innerText, // Terlambat
-                        cells[6].innerText, // Pulang Awal
-                        cells[7].innerText  // Durasi Kerja
-                    ];
-                    data.push(rowData);
-                }
+                records.forEach(r => {
+                     const clockInDate = r.clockInTimestamp ? r.clockInTimestamp.toDate() : null;
+                     const clockOutDate = r.clockOutTimestamp ? r.clockOutTimestamp.toDate() : null;
+                     const displayDateObj = clockInDate || clockOutDate;
+                     
+                     if (!displayDateObj) return;
+
+                     const dayOfWeek = displayDateObj.getDay();
+                     const days = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
+                     const dayName = days[dayOfWeek];
+                     
+                     const schedule = {
+                        mon: { in: '07:30', out: '15:30' }, tue: { in: '07:30', out: '15:30' }, wed: { in: '07:30', out: '15:30' },
+                        thu: { in: '07:30', out: '15:30' }, fri: { in: '07:30', out: '16:00' }, sat: { in: '08:00', out: '17:00' },
+                        sun: { in: '08:00', out: '17:00' }
+                     }[days[dayOfWeek].toLowerCase()];
+                     
+                     const standardInTime = new Date(displayDateObj);
+                     standardInTime.setHours(parseInt(schedule.in.split(':')[0]), parseInt(schedule.in.split(':')[1]), 0, 0);
+                     const latenessMs = clockInDate ? Math.max(0, clockInDate - standardInTime) : null;
+
+                     const standardOutTime = new Date(displayDateObj);
+                     standardOutTime.setHours(parseInt(schedule.out.split(':')[0]), parseInt(schedule.out.split(':')[1]), 0, 0);
+                     const earlyLeaveMs = clockOutDate ? Math.max(0, standardOutTime - clockOutDate) : null;
+                     
+                     const workDurationMs = (clockInDate && clockOutDate) ? clockOutDate - clockInDate : null;
+
+                     const rowData = [
+                         r.name,
+                         dayName,
+                         displayDateObj.toLocaleDateString('id-ID', {day: '2-digit', month: 'short', year: 'numeric'}),
+                         clockInDate ? clockInDate.toLocaleTimeString('id-ID') : '-',
+                         clockOutDate ? clockOutDate.toLocaleTimeString('id-ID') : '-',
+                         latenessMs !== null ? formatDuration(latenessMs) : '-',
+                         earlyLeaveMs !== null ? formatDuration(earlyLeaveMs) : '-',
+                         workDurationMs !== null ? formatDuration(workDurationMs) : '-'
+                     ];
+                     data.push(rowData);
+                });
 
                 const ws = XLSX.utils.aoa_to_sheet(data);
                 const wb = XLSX.utils.book_new();
@@ -703,7 +816,6 @@
                 XLSX.writeFile(wb, `Laporan_Kehadiran_${new Date().getFullYear()}-${new Date().getMonth() + 1}-${new Date().getDate()}.xlsx`);
             }
             
-            // --- NEW: Function to export Summary Table to XLSX ---
             function handleExportSummaryXlsx() {
                 const startDate = startDateInput.value ? new Date(startDateInput.value) : null;
                 const endDate = endDateInput.value ? new Date(endDateInput.value) : null;
@@ -713,7 +825,7 @@
                     return;
                 }
 
-                const records = getRecords();
+                const records = currentRecords;
                 const summary = {};
                 
                 const adjustedEndDate = new Date(endDate);
@@ -721,10 +833,10 @@
                 
                 records.forEach(r => {
                     if (!r.clockInTimestamp || !r.clockOutTimestamp) return;
-                    const recordDate = new Date(r.clockInTimestamp * 1000);
+                    const recordDate = r.clockInTimestamp.toDate();
 
                     if (recordDate >= startDate && recordDate < adjustedEndDate) {
-                        const duration = (r.clockOutTimestamp - r.clockInTimestamp) * 1000;
+                        const duration = r.clockOutTimestamp.toMillis() - r.clockInTimestamp.toMillis();
                         const name = r.name;
                         if (!summary[name]) {
                             summary[name] = 0;
@@ -754,13 +866,6 @@
                 XLSX.writeFile(wb, `Laporan_Akumulasi_Karyawan_${startDate.getFullYear()}-${startDate.getMonth() + 1}-${startDate.getDate()}_sd_${endDate.getFullYear()}-${endDate.getMonth() + 1}-${endDate.getDate()}.xlsx`);
             }
 
-
-            // --- Helper Functions ---
-            function getRecords() {
-                return JSON.parse(localStorage.getItem(RECORDS_KEY)) || [];
-            }
-            
-            // Fungsi untuk memformat durasi menjadi hh:mm:ss
             function formatDuration(ms) {
                 if (ms <= 0) return '00:00:00';
                 const totalSeconds = Math.floor(ms / 1000);
