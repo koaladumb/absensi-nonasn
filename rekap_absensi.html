@@ -177,7 +177,7 @@
         const modalActions = document.getElementById('modalActions');
 
         // Konfigurasi Firebase
-        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
+        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : null;
         const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
         const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
         
@@ -186,54 +186,67 @@
         let userId;
 
         // Inisialisasi Firebase
-        try {
-            const app = initializeApp(firebaseConfig);
-            db = getFirestore(app);
-            auth = getAuth(app);
-            connectionStatus.textContent = 'Status: Terhubung';
-            connectionStatus.classList.remove('status-warn');
-            connectionStatus.classList.add('status-ok');
-        } catch (error) {
-            showAlert('Kesalahan', 'Gagal menginisialisasi Firebase. Detail: ' + error.message);
+        if (!firebaseConfig || Object.keys(firebaseConfig).length === 0) {
+            handleFirebaseError('Konfigurasi Firebase tidak ditemukan. Silakan pastikan variabel __firebase_config sudah benar.');
+        } else {
+            try {
+                const app = initializeApp(firebaseConfig);
+                db = getFirestore(app);
+                auth = getAuth(app);
+                connectionStatus.textContent = 'Status: Terhubung';
+                connectionStatus.classList.remove('status-warn');
+                connectionStatus.classList.add('status-ok');
+            } catch (error) {
+                handleFirebaseError('Gagal menginisialisasi Firebase. Detail: ' + error.message);
+                console.error(error);
+            }
+        }
+        
+        // Fungsi untuk menangani dan menampilkan error Firebase
+        function handleFirebaseError(message) {
+            showAlert('Kesalahan', message);
             connectionStatus.textContent = 'Status: Gagal Terhubung';
             connectionStatus.classList.remove('status-warn');
             connectionStatus.classList.add('status-error');
-            console.error(error);
         }
 
-        // Otentikasi dan siapkan listener data
-        onAuthStateChanged(auth, async (user) => {
-            if (user) {
-                userId = user.uid;
-                userDisplay.textContent = `ID Pengguna Saat Ini: ${userId}`;
-                userDisplay.classList.remove('hidden');
-                
-                // Tambahkan listener real-time untuk data kehadiran
-                const q = query(collection(db, `/artifacts/${appId}/public/data/attendance_records`), where("userId", "==", userId));
-                onSnapshot(q, (snapshot) => {
-                    const records = [];
-                    snapshot.forEach(doc => {
-                        records.push({ id: doc.id, ...doc.data() });
-                    });
-                    renderHistoryTable(records);
-                }, (error) => {
-                    console.error("Kesalahan mendengarkan data Firestore:", error);
-                    showAlert('Kesalahan Data', 'Gagal memuat data kehadiran. Silakan coba lagi.');
-                });
 
-            } else {
-                 try {
-                    if (initialAuthToken) {
-                        await signInWithCustomToken(auth, initialAuthToken);
-                    } else {
-                        await signInAnonymously(auth);
+        // Otentikasi dan siapkan listener data
+        if (auth) {
+             onAuthStateChanged(auth, async (user) => {
+                if (user) {
+                    userId = user.uid;
+                    userDisplay.textContent = `ID Pengguna Saat Ini: ${userId}`;
+                    userDisplay.classList.remove('hidden');
+                    
+                    // Tambahkan listener real-time untuk data kehadiran
+                    const q = query(collection(db, `/artifacts/${appId}/public/data/attendance_records`), where("userId", "==", userId));
+                    onSnapshot(q, (snapshot) => {
+                        const records = [];
+                        snapshot.forEach(doc => {
+                            records.push({ id: doc.id, ...doc.data() });
+                        });
+                        renderHistoryTable(records);
+                    }, (error) => {
+                        console.error("Kesalahan mendengarkan data Firestore:", error);
+                        showAlert('Kesalahan Data', 'Gagal memuat data kehadiran. Silakan coba lagi.');
+                    });
+
+                } else {
+                     try {
+                        if (initialAuthToken) {
+                            await signInWithCustomToken(auth, initialAuthToken);
+                        } else {
+                            await signInAnonymously(auth);
+                        }
+                    } catch (error) {
+                        console.error("Gagal masuk:", error);
+                        showAlert('Kesalahan Otentikasi', 'Gagal masuk. Silakan periksa koneksi internet Anda atau coba lagi nanti.');
                     }
-                } catch (error) {
-                    console.error("Gagal masuk:", error);
-                    showAlert('Kesalahan Otentikasi', 'Gagal masuk. Silakan periksa koneksi internet Anda atau coba lagi nanti.');
                 }
-            }
-        });
+            });
+        }
+
 
         // Event Listeners
         clockInTimestampInput.addEventListener('input', (e) => handleTimestampInput(e, clockInPreview));
