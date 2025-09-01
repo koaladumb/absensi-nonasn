@@ -6,7 +6,7 @@
     <title>Rekapitulasi Kehadiran Karyawan (Timestamp)</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <!-- SheetJS library untuk ekspor Excel -->
+    <!-- SheetJS library for Excel export -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <style>
         body {
@@ -104,21 +104,6 @@
                     </div>
                 </div>
 
-                <div class="card p-6 rounded-lg">
-                    <h2 class="text-xl font-semibold mb-4 text-white">Pengaturan Jam Kerja</h2>
-                     <div class="space-y-4">
-                        <div>
-                            <label for="standardIn" class="block text-sm font-medium mb-1">Jam Masuk Standar</label>
-                            <input type="time" id="standardIn" value="08:00" class="input-field w-full p-2 rounded-md">
-                        </div>
-                        <div>
-                            <label for="standardOut" class="block text-sm font-medium mb-1">Jam Pulang Standar</label>
-                            <input type="time" id="standardOut" value="17:00" class="input-field w-full p-2 rounded-md">
-                        </div>
-                        <button id="saveSettings" class="w-full btn-secondary font-semibold py-2 px-4 rounded-md">Simpan Pengaturan</button>
-                    </div>
-                </div>
-
                  <div class="card p-6 rounded-lg">
                     <h2 class="text-xl font-semibold mb-4 text-white">Akumulasi</h2>
                      <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-center">
@@ -133,7 +118,7 @@
                     </div>
                 </div>
                 
-                <!-- Menu Baru: Kelola Data -->
+                <!-- New Menu: Manage Data -->
                 <div class="card p-6 rounded-lg">
                     <h2 class="text-xl font-semibold mb-4 text-white">Kelola Data</h2>
                     <div class="grid grid-cols-1 gap-4">
@@ -159,7 +144,7 @@
                             <thead class="border-b border-gray-600">
                                 <tr>
                                     <th class="p-2">Nama</th>
-                                    <th class="p-2">Hari</th> <!-- Kolom Hari Baru -->
+                                    <th class="p-2">Hari</th> <!-- New Day column -->
                                     <th class="p-2">Tanggal</th>
                                     <th class="p-2">Jam Masuk</th>
                                     <th class="p-2">Jam Pulang</th>
@@ -170,7 +155,7 @@
                                 </tr>
                             </thead>
                             <tbody id="historyTableBody">
-                                <!-- Data riwayat akan ditambahkan di sini -->
+                                <!-- History data will be added here -->
                             </tbody>
                         </table>
                     </div>
@@ -193,18 +178,15 @@
 
     <script>
         document.addEventListener('DOMContentLoaded', () => {
-            // Referensi Elemen DOM
+            // DOM element references
             const nameInput = document.getElementById('employeeName');
             const clockInTimestampInput = document.getElementById('clockInTimestamp');
             const clockOutTimestampInput = document.getElementById('clockOutTimestamp');
             const clockInPreview = document.getElementById('clockInPreview');
             const clockOutPreview = document.getElementById('clockOutPreview');
             const saveButton = document.getElementById('saveButton');
-            const standardInInput = document.getElementById('standardIn');
-            const standardOutInput = document.getElementById('standardOut');
-            const saveSettingsButton = document.getElementById('saveSettings');
             
-            // Elemen Display
+            // Display elements
             const weeklyHoursEl = document.getElementById('weeklyHours');
             const monthlyHoursEl = document.getElementById('monthlyHours');
             const historyTableBody = document.getElementById('historyTableBody');
@@ -215,39 +197,36 @@
             const modalMessage = document.getElementById('modalMessage');
             const modalActions = document.getElementById('modalActions');
 
-            // Elemen menu Kelola Data
+            // Manage Data menu elements
             const backupDataBtn = document.getElementById('backupDataBtn');
             const restoreFile = document.getElementById('restoreFile');
             const deleteAllDataBtn = document.getElementById('deleteAllDataBtn');
             const exportXlsxBtn = document.getElementById('exportXlsxBtn');
 
-            // Kunci Local Storage
+            // Local Storage keys
             const RECORDS_KEY = 'attendanceRecords_ts';
-            const SETTINGS_KEY = 'attendanceSettings_ts';
 
-            // Inisialisasi Aplikasi
-            loadSettings();
+            // Application initialization
             calculateAndRenderAll();
 
             // Event Listeners
             clockInTimestampInput.addEventListener('input', (e) => handleTimestampInput(e, clockInPreview));
             clockOutTimestampInput.addEventListener('input', (e) => handleTimestampInput(e, clockOutPreview));
             saveButton.addEventListener('click', handleSaveRecord);
-            saveSettingsButton.addEventListener('click', handleSaveSettings);
             historyTableBody.addEventListener('click', handleHistoryActions);
             
-            // Event Listeners untuk menu baru
+            // Event listeners for the new menu
             backupDataBtn.addEventListener('click', handleBackupData);
             restoreFile.addEventListener('change', handleRestoreData);
             deleteAllDataBtn.addEventListener('click', handleDeleteAllData);
             exportXlsxBtn.addEventListener('click', handleExportXlsx);
 
-            // Fungsi untuk mengkonversi timestamp ke format tanggal & waktu saat user mengetik
+            // Function to convert timestamp to date/time format as user types
             function handleTimestampInput(event, displayElement) {
                 const timestamp = parseInt(event.target.value);
                 if (timestamp && !isNaN(timestamp)) {
-                    // Cek apakah timestamp dalam milidetik atau detik
-                    const isMs = timestamp > 1e12; // Jika lebih besar dari 1 triliun, asumsikan milidetik
+                    // Check if the timestamp is in milliseconds or seconds
+                    const isMs = timestamp > 1e12; // If greater than 1 trillion, assume milliseconds
                     const date = new Date(isMs ? timestamp : timestamp * 1000);
                     if (!isNaN(date)) {
                          displayElement.textContent = date.toLocaleString('id-ID', {
@@ -262,7 +241,7 @@
                 }
             }
 
-            // Fungsi untuk menyimpan atau memperbarui record kehadiran
+            // Function to save or update an attendance record
             function handleSaveRecord() {
                 const name = nameInput.value.trim();
                 const clockInValue = clockInTimestampInput.value;
@@ -302,11 +281,11 @@
                 });
 
                 if (recordIndex > -1) {
-                    // Update record yang ada
+                    // Update existing record
                     if (clockInTimestamp) records[recordIndex].clockInTimestamp = clockInTimestamp;
                     if (clockOutTimestamp) records[recordIndex].clockOutTimestamp = clockOutTimestamp;
                 } else {
-                    // Buat record baru
+                    // Create a new record
                     const newRecord = {
                         id: Date.now(),
                         name,
@@ -324,16 +303,6 @@
                 clockInPreview.textContent = '';
                 clockOutPreview.textContent = '';
 
-                calculateAndRenderAll();
-            }
-            
-            function handleSaveSettings() {
-                const settings = {
-                    standardIn: standardInInput.value,
-                    standardOut: standardOutInput.value
-                };
-                localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
-                showAlert('Berhasil', 'Pengaturan jam kerja berhasil disimpan!');
                 calculateAndRenderAll();
             }
             
@@ -360,7 +329,6 @@
             
             function renderHistoryTable() {
                 const records = getRecords();
-                const settings = getSettings();
                 
                 records.sort((a, b) => (b.clockInTimestamp || b.clockOutTimestamp) - (a.clockInTimestamp || a.clockOutTimestamp));
 
@@ -370,15 +338,15 @@
                     return;
                 }
 
-                // Pengaturan jam kerja default berdasarkan hari
+                // Default working schedule based on day
                 const defaultDailySchedule = {
                     mon: { in: '07:30', out: '15:30' },
                     tue: { in: '07:30', out: '15:30' },
                     wed: { in: '07:30', out: '15:30' },
                     thu: { in: '07:30', out: '15:30' },
                     fri: { in: '07:30', out: '16:00' },
-                    sat: { in: settings.standardIn, out: settings.standardOut },
-                    sun: { in: settings.standardIn, out: settings.standardOut }
+                    sat: { in: '08:00', out: '17:00' },
+                    sun: { in: '08:00', out: '17:00' }
                 };
 
                 records.forEach(r => {
@@ -388,11 +356,11 @@
                     const displayDateObj = clockInDate || clockOutDate;
                     if (!displayDateObj) return; 
                     
-                    const dayOfWeek = displayDateObj.getDay(); // 0 = Minggu, 1 = Senin, ..., 6 = Sabtu
+                    const dayOfWeek = displayDateObj.getDay(); // 0 = Sunday, 1 = Monday, ..., 6 = Saturday
                     const days = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
                     const dayKey = days[dayOfWeek];
                     
-                    const schedule = defaultDailySchedule[dayKey] || { in: settings.standardIn, out: settings.standardOut };
+                    const schedule = defaultDailySchedule[dayKey];
                     const [stdInHour, stdInMin] = schedule.in.split(':').map(Number);
                     const [stdOutHour, stdOutMin] = schedule.out.split(':').map(Number);
                     
@@ -497,11 +465,10 @@
                 };
             }
 
-            // --- Fungsi-fungsi baru untuk Kelola Data ---
+            // --- New functions for Data Management ---
             function handleBackupData() {
                 const data = {
-                    records: getRecords(),
-                    settings: getSettings()
+                    records: getRecords()
                 };
                 const dataStr = JSON.stringify(data, null, 2);
                 const blob = new Blob([dataStr], {type: "application/json"});
@@ -525,10 +492,9 @@
                 reader.onload = (e) => {
                     try {
                         const restoredData = JSON.parse(e.target.result);
-                        if (restoredData.records && restoredData.settings) {
+                        if (restoredData.records) {
                             showConfirm('Konfirmasi Restore', 'Ini akan menimpa semua data yang ada. Lanjutkan?', () => {
                                 localStorage.setItem(RECORDS_KEY, JSON.stringify(restoredData.records));
-                                localStorage.setItem(SETTINGS_KEY, JSON.stringify(restoredData.settings));
                                 showAlert('Berhasil', 'Data berhasil dipulihkan!');
                                 calculateAndRenderAll();
                             });
@@ -550,10 +516,9 @@
                 });
             }
 
-            // --- Fungsi baru untuk Ekspor XLSX ---
+            // --- New function for XLSX export ---
             function handleExportXlsx() {
                 const records = getRecords();
-                const settings = getSettings();
                 const tableBody = historyTableBody.children;
 
                 if (records.length === 0) {
@@ -594,17 +559,6 @@
                 return JSON.parse(localStorage.getItem(RECORDS_KEY)) || [];
             }
             
-            function getSettings() {
-                const saved = JSON.parse(localStorage.getItem(SETTINGS_KEY));
-                return saved || { standardIn: '08:00', standardOut: '17:00' };
-            }
-
-            function loadSettings() {
-                const settings = getSettings();
-                standardInInput.value = settings.standardIn;
-                standardOutInput.value = settings.standardOut;
-            }
-
             function formatDuration(ms, showSeconds = false) {
                 if (ms <= 0) return '0m';
                 const totalSeconds = Math.floor(ms / 1000);
