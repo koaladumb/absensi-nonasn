@@ -71,14 +71,12 @@
         .file-upload-input {
             display: none;
         }
-        /* Style for scrollable table container */
         .table-container {
-            max-height: 400px; /* Adjust height as needed */
+            max-height: 400px;
             overflow-y: auto;
             border: 1px solid #30363d;
             border-radius: 0.5rem;
         }
-        /* Ensure table header is sticky */
         .table-container thead {
             position: sticky;
             top: 0;
@@ -95,8 +93,9 @@
         </header>
 
         <main class="grid grid-cols-1 lg:grid-cols-5 gap-6">
-            <!-- Kolom Input -->
+            <!-- Kolom Input & Ringkasan Akumulasi -->
             <div class="lg:col-span-2 flex flex-col gap-6">
+                <!-- Card Input Data -->
                 <div class="card p-6 rounded-lg">
                     <h2 class="text-xl font-semibold mb-4 text-white">Input Data Kehadiran</h2>
                     <div class="space-y-4">
@@ -112,14 +111,15 @@
                         <div>
                             <label for="clockOutTimestamp" class="block text-sm font-medium mb-1">Timestamp Pulang</label>
                             <input type="number" id="clockOutTimestamp" class="input-field w-full p-2 rounded-md" placeholder="e.g., 1725184800">
-                             <p id="clockOutPreview" class="timestamp-preview"></p>
+                            <p id="clockOutPreview" class="timestamp-preview"></p>
                         </div>
                         <button id="saveButton" class="w-full btn-primary font-semibold py-2 px-4 rounded-md">Simpan Data</button>
                     </div>
                 </div>
 
+                <!-- Card Akumulasi Total -->
                  <div class="card p-6 rounded-lg">
-                    <h2 class="text-xl font-semibold mb-4 text-white">Akumulasi</h2>
+                    <h2 class="text-xl font-semibold mb-4 text-white">Akumulasi Total</h2>
                      <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-center">
                         <div>
                             <p class="text-sm text-gray-400">Total Jam Kerja Minggu Ini</p>
@@ -132,7 +132,7 @@
                     </div>
                 </div>
                 
-                <!-- Menu: Kelola Data -->
+                <!-- Menu Kelola Data -->
                 <div class="card p-6 rounded-lg">
                     <h2 class="text-xl font-semibold mb-4 text-white">Kelola Data</h2>
                     <div class="grid grid-cols-1 gap-4">
@@ -146,8 +146,28 @@
                 </div>
             </div>
 
-            <!-- Kolom Riwayat -->
+            <!-- Kolom Riwayat & Akumulasi per Karyawan -->
             <div class="lg:col-span-3 flex flex-col gap-6">
+                <!-- Tabel Akumulasi per Karyawan -->
+                <div class="card p-6 rounded-lg">
+                    <h2 class="text-xl font-semibold mb-4 text-white">Akumulasi Per Karyawan</h2>
+                    <div class="overflow-x-auto table-container">
+                        <table class="w-full text-left text-sm">
+                            <thead class="border-b border-gray-600">
+                                <tr>
+                                    <th class="p-2">Nama</th>
+                                    <th class="p-2">Minggu Ini</th>
+                                    <th class="p-2">Bulan Ini</th>
+                                </tr>
+                            </thead>
+                            <tbody id="employeeSummaryTableBody">
+                                <!-- Data akumulasi per karyawan akan ditambahkan di sini -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Tabel Rekapitulasi Kehadiran -->
                 <div class="card p-6 rounded-lg">
                     <div class="flex justify-between items-center mb-4">
                         <h2 class="text-xl font-semibold text-white">Tabel Rekapitulasi Kehadiran</h2>
@@ -189,7 +209,6 @@
         </div>
     </div>
 
-
     <script>
         document.addEventListener('DOMContentLoaded', () => {
             // Referensi Elemen DOM
@@ -204,6 +223,7 @@
             const weeklyHoursEl = document.getElementById('weeklyHours');
             const monthlyHoursEl = document.getElementById('monthlyHours');
             const historyTableBody = document.getElementById('historyTableBody');
+            const employeeSummaryTableBody = document.getElementById('employeeSummaryTableBody');
 
             // Modal elements
             const modal = document.getElementById('modal');
@@ -339,6 +359,7 @@
             function calculateAndRenderAll() {
                 renderHistoryTable();
                 renderAggregateSummaries();
+                renderEmployeeSummary(); // Call the new function
             }
             
             function renderHistoryTable() {
@@ -438,6 +459,51 @@
                 
                 weeklyHoursEl.textContent = formatDuration(weeklyMs);
                 monthlyHoursEl.textContent = formatDuration(monthlyMs);
+            }
+
+            // NEW: Fungsi untuk merender akumulasi per karyawan
+            function renderEmployeeSummary() {
+                const records = getRecords();
+                const summary = {};
+                const today = new Date();
+                const startOfWeek = new Date(today.getFullYear(), today.getMonth(), today.getDate() - today.getDay());
+                
+                records.forEach(r => {
+                    if (!r.clockInTimestamp || !r.clockOutTimestamp) return;
+                    const duration = (r.clockOutTimestamp - r.clockInTimestamp) * 1000;
+                    const recordDate = new Date(r.clockInTimestamp * 1000);
+
+                    if (!summary[r.name]) {
+                        summary[r.name] = { weeklyMs: 0, monthlyMs: 0 };
+                    }
+                    
+                    if (recordDate >= startOfWeek) {
+                        summary[r.name].weeklyMs += duration;
+                    }
+                    if (recordDate.getMonth() === today.getMonth() && recordDate.getFullYear() === today.getFullYear()) {
+                        summary[r.name].monthlyMs += duration;
+                    }
+                });
+
+                employeeSummaryTableBody.innerHTML = '';
+                const sortedNames = Object.keys(summary).sort();
+
+                if (sortedNames.length === 0) {
+                     employeeSummaryTableBody.innerHTML = `<tr><td colspan="3" class="text-center p-4 text-gray-500">Belum ada data akumulasi per karyawan.</td></tr>`;
+                     return;
+                }
+
+                sortedNames.forEach(name => {
+                    const data = summary[name];
+                    const row = document.createElement('tr');
+                    row.className = 'border-b border-gray-700 hover:bg-gray-800';
+                    row.innerHTML = `
+                        <td class="p-2 font-semibold">${name}</td>
+                        <td class="p-2">${formatDuration(data.weeklyMs)}</td>
+                        <td class="p-2">${formatDuration(data.monthlyMs)}</td>
+                    `;
+                    employeeSummaryTableBody.appendChild(row);
+                });
             }
 
             // --- Modal Functions ---
